@@ -1,0 +1,11 @@
+PERSONAL LEASE AGREEMENT
+
+Tenant: Jane Doe
+Tenant ID: 2
+
+This is a private document only visible to this specific tenant.
+
+Lease terms:
+- Duration: 12 months
+- Monthly rent: $1,200
+- Security deposit: $1,000

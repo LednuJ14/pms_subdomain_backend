@@ -1,0 +1,16 @@
+MAINTENANCE REQUEST FORM
+
+Please use this form to submit maintenance requests:
+
+1. Description of issue:
+2. Location/Room:
+3. Urgency level (1-5):
+4. Best time for access:
+5. Contact information:
+
+Submit completed forms to:
+- Email: maintenance@property.com
+- Phone: (555) 123-4568
+- Online portal: www.property.com/maintenance
+
+Response time: 24-48 hours for non-emergency items
