@@ -52,9 +52,9 @@ class User(db.Model):
     # Note: Database may still have ADMIN in enum, but subdomain doesn't use it
     # Database has: enum('ADMIN','MANAGER','TENANT','STAFF')
     role = db.Column(db.Enum('ADMIN', 'MANAGER', 'TENANT', 'STAFF', name='role', create_constraint=False), nullable=False, default='TENANT')
-    status = db.Column(db.Enum(UserStatus), nullable=False, default=UserStatus.PENDING_VERIFICATION)
+    status = db.Column(db.Enum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
     # Database has email_verified, not is_verified
-    email_verified = db.Column(db.Boolean, default=False, nullable=True)
+    email_verified = db.Column(db.Boolean, default=True, nullable=True)
     
     # Timestamps - Database allows NULL
     created_at = db.Column(db.DateTime, nullable=True)
@@ -84,8 +84,19 @@ class User(db.Model):
     # Profile Information
     profile_image_url = db.Column(db.String(255))
     address = db.Column(db.Text)
+    city = db.Column(db.String(100))
+    province = db.Column(db.String(100))
+    postal_code = db.Column(db.String(20))
+    country = db.Column(db.String(100), default='Philippines')
+    bio = db.Column(db.Text)
+    
     emergency_contact_name = db.Column(db.String(100))
     emergency_contact_phone = db.Column(db.String(20))
+    
+    # Main domain verification and security fields
+    email_verification_token = db.Column(db.String(255))
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime)
     
     # Two-Factor Authentication (Email-based, like main domain)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
@@ -109,18 +120,18 @@ class User(db.Model):
             self.role = role.upper()
         else:
             self.role = 'TENANT'
-        # Handle status - use provided status or default to PENDING_VERIFICATION
+        # Handle status - use provided status or default to ACTIVE
         if status is None:
-            self.status = UserStatus.PENDING_VERIFICATION
+            self.status = UserStatus.ACTIVE
         elif isinstance(status, UserStatus):
             self.status = status
         elif isinstance(status, str):
             try:
                 self.status = UserStatus(status.lower())
             except ValueError:
-                self.status = UserStatus.PENDING_VERIFICATION
+                self.status = UserStatus.ACTIVE
         else:
-            self.status = UserStatus.PENDING_VERIFICATION
+            self.status = UserStatus.ACTIVE
         if password:
             self.set_password(password)
         

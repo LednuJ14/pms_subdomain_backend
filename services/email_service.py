@@ -5,7 +5,7 @@ from app import mail
 def send_password_reset_email(email, first_name, reset_token):
     """Send password reset email to user."""
     try:
-        subject = "Reset Your JACS Property Management Password"
+        subject = "Reset Your PMS Property Management System Password"
         
         # Frontend URL for password reset
         reset_url = f"http://localhost:8080/login?token={reset_token}"
@@ -25,12 +25,12 @@ def send_password_reset_email(email, first_name, reset_token):
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>JACS Property Management</h1>
+                    <h1>PMS Property Management System</h1>
                 </div>
                 <div class="content">
                     <h2>Password Reset Request</h2>
                     <p>Hi {first_name},</p>
-                    <p>We received a request to reset your password for your JACS Property Management account.</p>
+                    <p>We received a request to reset your password for your PMS Property Management System account.</p>
                     <p>Click the button below to reset your password:</p>
                     <a href="{reset_url}" class="button">Reset Password</a>
                     <p>If the button doesn't work, copy and paste this link into your browser:</p>
@@ -39,7 +39,7 @@ def send_password_reset_email(email, first_name, reset_token):
                     <p>If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
                 </div>
                 <div class="footer">
-                    <p>© 2025 JACS Property Management System. All rights reserved.</p>
+                    <p>© 2025 PMS Property Management System. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -47,11 +47,11 @@ def send_password_reset_email(email, first_name, reset_token):
         """
         
         text_body = f"""
-        JACS Property Management - Password Reset
+        PMS Property Management System - Password Reset
         
         Hi {first_name},
         
-        We received a request to reset your password for your JACS Property Management account.
+        We received a request to reset your password for your PMS Property Management System account.
         
         Click the following link to reset your password:
         {reset_url}
@@ -60,7 +60,7 @@ def send_password_reset_email(email, first_name, reset_token):
         
         If you didn't request this password reset, please ignore this email.
         
-        © 2025 JACS Property Management System
+        © 2025 PMS Property Management System
         """
         
         msg = Message(
@@ -81,7 +81,7 @@ def send_password_reset_email(email, first_name, reset_token):
 def send_welcome_email(email, first_name, role):
     """Send welcome email to new users."""
     try:
-        subject = "Welcome to JACS Property Management System"
+        subject = "Welcome to PMS Property Management System"
         
         html_body = f"""
         <html>
@@ -96,18 +96,18 @@ def send_welcome_email(email, first_name, role):
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>Welcome to JACS!</h1>
+                    <h1>Welcome to PMS!</h1>
                 </div>
                 <div class="content">
                     <h2>Account Created Successfully</h2>
                     <p>Hi {first_name},</p>
-                    <p>Welcome to JACS Property Management System! Your account has been successfully created.</p>
+                    <p>Welcome to PMS Property Management System! Your account has been successfully created.</p>
                     <p><strong>Your Role:</strong> {role.replace('_', ' ').title()}</p>
                     <p>You can now log in to access your dashboard and start managing your property-related tasks.</p>
                     <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
                 </div>
                 <div class="footer">
-                    <p>© 2025 JACS Property Management System. All rights reserved.</p>
+                    <p>© 2025 PMS Property Management System. All rights reserved.</p>
                 </div>
             </div>
         </body>

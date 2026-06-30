@@ -528,25 +528,35 @@ def upload_document():
         # Generate clean filename (use original filename, ensure uniqueness on disk)
         original_filename = secure_filename(file.filename)
         
-        # Ensure upload directory exists
-        upload_dir = os.path.join(current_app.instance_path, current_app.config.get('UPLOAD_FOLDER', 'uploads'))
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Generate unique file path on disk (using UUID only for file system)
-        # But store original filename in database
-        file_extension = os.path.splitext(original_filename)[1] if '.' in original_filename else ''
-        file_base_name = os.path.splitext(original_filename)[0] if '.' in original_filename else original_filename
-        
-        # Check if file already exists, if so append a number
-        disk_filename = original_filename
-        counter = 1
-        while os.path.exists(os.path.join(upload_dir, disk_filename)):
-            disk_filename = f"{file_base_name}_{counter}{file_extension}"
-            counter += 1
-        
-        # Save file with clean name (or numbered if duplicate)
-        file_path = os.path.join(upload_dir, disk_filename)
-        file.save(file_path)
+        # Check if Cloudinary is configured
+        if current_app.config.get('CLOUDINARY_CLOUD_NAME'):
+            from utils.cloudinary_helpers import upload_to_cloudinary
+            success, file_path, error = upload_to_cloudinary(
+                file, 
+                folder=f"jacs/subdomain/documents/{property_id if property_id else 'general'}"
+            )
+            if not success:
+                return jsonify({'error': error}), 400
+        else:
+            # Ensure upload directory exists
+            upload_dir = os.path.join(current_app.instance_path, current_app.config.get('UPLOAD_FOLDER', 'uploads'))
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            # Generate unique file path on disk (using UUID only for file system)
+            # But store original filename in database
+            file_extension = os.path.splitext(original_filename)[1] if '.' in original_filename else ''
+            file_base_name = os.path.splitext(original_filename)[0] if '.' in original_filename else original_filename
+            
+            # Check if file already exists, if so append a number
+            disk_filename = original_filename
+            counter = 1
+            while os.path.exists(os.path.join(upload_dir, disk_filename)):
+                disk_filename = f"{file_base_name}_{counter}{file_extension}"
+                counter += 1
+            
+            # Save file with clean name (or numbered if duplicate)
+            file_path = os.path.join(upload_dir, disk_filename)
+            file.save(file_path)
         
         # Validate tenant_id if provided (for tenant-specific documents)
         tenant_id_final = None

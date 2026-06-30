@@ -39,3 +39,6 @@ qrcode[pil]==7.4.2
 # Production (optional)
 # gunicorn>=21.0.0
 # gevent>=23.0.0
+
+cloudinary==1.36.0
+

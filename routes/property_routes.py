@@ -177,8 +177,8 @@ def get_display_settings(property_id):
         # If no display settings, use defaults
         if not display_settings:
             display_settings = {
-            'companyName': property_obj.name or 'JACS',
-            'propertyName': property_obj.name or 'JACS',
+            'companyName': property_obj.name or 'PMS',
+            'propertyName': property_obj.name or 'PMS',
             'logoUrl': '',
             'primaryColor': '#000000',
             'secondaryColor': '#3B82F6',
@@ -402,21 +402,31 @@ def upload_logo(property_id):
         if file_size > 2 * 1024 * 1024:  # 2MB
             return jsonify({'error': 'File size exceeds 2MB limit'}), 400
         
-        # Create upload directory if it doesn't exist
-        upload_dir = os.path.join(current_app.instance_path, 'uploads', 'logos')
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Generate secure filename
-        filename = secure_filename(file.filename)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{property_id}_{timestamp}_{filename}"
-        filepath = os.path.join(upload_dir, filename)
-        
-        # Save file
-        file.save(filepath)
-        
-        # Generate URL (relative path - will be served by Flask route)
-        logo_url = f"/api/properties/{property_id}/logo/{filename}"
+        # Check if Cloudinary is configured
+        if current_app.config.get('CLOUDINARY_CLOUD_NAME'):
+            from utils.cloudinary_helpers import upload_to_cloudinary
+            success, logo_url, error = upload_to_cloudinary(
+                file, 
+                folder=f"jacs/subdomain/properties/{property_id}/logo"
+            )
+            if not success:
+                return jsonify({'error': error}), 400
+        else:
+            # Create upload directory if it doesn't exist
+            upload_dir = os.path.join(current_app.instance_path, 'uploads', 'logos')
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            # Generate secure filename
+            filename = secure_filename(file.filename)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{property_id}_{timestamp}_{filename}"
+            filepath = os.path.join(upload_dir, filename)
+            
+            # Save file
+            file.save(filepath)
+            
+            # Generate URL (relative path - will be served by Flask route)
+            logo_url = f"/api/properties/{property_id}/logo/{filename}"
         
         # Update display settings - parse existing JSON string first
         import json
