@@ -51,6 +51,14 @@ except ImportError:
 
 analytics_bp = Blueprint('analytics', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 def get_property_id_from_request(data=None):
     """
     Try to get property_id from request.
@@ -303,7 +311,7 @@ def get_manager_dashboard(property_id):
             from models.user import User
             current_user = User.query.get(current_user_id)
             if current_user and current_user.is_property_manager():
-                if property_obj.owner_id != current_user.id:
+                if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                     return jsonify({
                         'error': 'Access denied. You do not own this property.',
                         'code': 'PROPERTY_ACCESS_DENIED'

@@ -9,6 +9,14 @@ from models.user import User, UserRole
 
 user_bp = Blueprint('users', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 def allowed_file(filename):
     """Check if file extension is allowed."""
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -94,7 +102,7 @@ def get_users():
         if not property_obj:
             return jsonify({'error': 'Property not found'}), 404
         
-        if property_obj.owner_id != current_user_id:
+        if property_obj.owner_id != current_user_id and not is_super_admin(current_user_id):
             return jsonify({
                 'error': 'Access denied. You do not own this property.',
                 'code': 'PROPERTY_ACCESS_DENIED'

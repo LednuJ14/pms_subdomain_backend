@@ -8,6 +8,14 @@ import re
 
 tenant_bp = Blueprint('tenants', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 @tenant_bp.route('/me', methods=['GET'])
 @jwt_required()
 def get_my_tenant():
@@ -140,7 +148,7 @@ def get_tenants_internal():
                                 })
                                 response.status_code = 200  # Return 200 to prevent CORS issues
                                 return response
-                            if property_obj.owner_id != current_user.id:
+                            if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                                 response = jsonify({
                                     'tenants': [],
                                     'error': 'Access denied. You do not own this property.',
@@ -478,7 +486,7 @@ def create_tenant():
                 if not property_obj:
                     return jsonify({'error': 'Property not found'}), 404
                 
-                if property_obj.owner_id != current_user.id:
+                if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                     return jsonify({
                         'error': 'Access denied. You do not own this property.',
                         'code': 'PROPERTY_ACCESS_DENIED'
@@ -781,7 +789,7 @@ def update_tenant(tenant_id):
                 if property_id:
                     from models.property import Property
                     property_obj = Property.query.get(property_id)
-                    if property_obj and property_obj.owner_id != current_user.id:
+                    if property_obj and property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                         return jsonify({
                             'error': 'Access denied. You do not own this property.',
                             'code': 'PROPERTY_ACCESS_DENIED'
@@ -802,7 +810,7 @@ def update_tenant(tenant_id):
                 if tenant.property_id:
                     from models.property import Property
                     property_obj = Property.query.get(tenant.property_id)
-                    if not property_obj or property_obj.owner_id != current_user.id:
+                    if not property_obj or (property_obj.owner_id != current_user.id and not is_super_admin(current_user.id)):
                         return jsonify({
                             'error': 'Access denied. This tenant does not belong to your property.',
                             'code': 'PROPERTY_ACCESS_DENIED'
@@ -1176,7 +1184,7 @@ def delete_tenant(tenant_id):
                 if tenant.property_id:
                     from models.property import Property
                     property_obj = Property.query.get(tenant.property_id)
-                    if not property_obj or property_obj.owner_id != current_user.id:
+                    if not property_obj or (property_obj.owner_id != current_user.id and not is_super_admin(current_user.id)):
                         return jsonify({
                             'error': 'Access denied. This tenant does not belong to your property.',
                             'code': 'PROPERTY_ACCESS_DENIED'
@@ -1346,7 +1354,7 @@ def get_tenant(tenant_id):
                 if tenant.property_id:
                     from models.property import Property
                     property_obj = Property.query.get(tenant.property_id)
-                    if not property_obj or property_obj.owner_id != current_user.id:
+                    if not property_obj or (property_obj.owner_id != current_user.id and not is_super_admin(current_user.id)):
                         return jsonify({
                             'error': 'Access denied. This tenant does not belong to your property.',
                             'code': 'PROPERTY_ACCESS_DENIED'
