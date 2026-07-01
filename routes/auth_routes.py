@@ -443,9 +443,8 @@ def get_role_value(role):
         role_str = str(role).upper()
     
     # Map database values to lowercase for consistency
-    # ADMIN is not supported in subdomain - map to property_manager for backward compatibility
     role_map = {
-        'ADMIN': 'property_manager',  # Map ADMIN to property_manager in subdomain
+        'ADMIN': 'ADMIN',  # Preserve ADMIN role so frontend can detect it
         'MANAGER': 'property_manager',
         'STAFF': 'staff',
         'TENANT': 'tenant'
@@ -898,11 +897,42 @@ def login():
                 current_app.logger.debug(f"Staff login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
                 
                 if not property_id or property_id == -1 or str(property_id) == '-1':
-                    return jsonify({
-                        'error': 'Property context is required. Please login through your property portal.',
-                        'code': 'PROPERTY_CONTEXT_REQUIRED',
-                        'message': 'You must login through the specific property subdomain where you are assigned.'
-                    }), 403
+                    # Check if logging in from the admin portal
+                    is_admin_portal = False
+                    if data and data.get('property_subdomain') == 'admin':
+                        is_admin_portal = True
+                    origin_header = request.headers.get('Origin', '')
+                    if not is_admin_portal and ('admin.localhost' in origin_header or 'admin.pms' in origin_header):
+                        is_admin_portal = True
+                    
+                    if is_admin_portal:
+                        from sqlalchemy import text as sa_text
+                        # Auto-detect staff's assigned property
+                        staff_property = db.session.execute(sa_text(
+                            """
+                            SELECT s.property_id, p.portal_subdomain FROM staff s
+                            INNER JOIN properties p ON s.property_id = p.id
+                            WHERE s.user_id = :user_id
+                            LIMIT 1
+                            """
+                        ), {'user_id': user.id}).first()
+                        
+                        if staff_property:
+                            property_id = staff_property[0]
+                            user.auto_detected_subdomain = staff_property[1]
+                            user.auto_detected_property_id = property_id
+                            current_app.logger.debug(f"Auto-detected property {property_id} for staff {user.id} from admin portal")
+                        else:
+                            return jsonify({
+                                'error': 'You are not assigned to any property.',
+                                'code': 'NO_PROPERTY_ASSIGNMENT'
+                            }), 403
+                    else:
+                        return jsonify({
+                            'error': 'Property context is required. Please login through your property portal.',
+                            'code': 'PROPERTY_CONTEXT_REQUIRED',
+                            'message': 'You must login through the specific property subdomain where you are assigned.'
+                        }), 403
                 
                 # Verify staff belongs to THIS SPECIFIC property from the request
                 # This prevents staff from logging into other property subdomains
@@ -983,11 +1013,41 @@ def login():
                     current_app.logger.debug(f"Property manager login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
                     
                     if not property_id or property_id == -1 or str(property_id) == '-1':
-                        return jsonify({
-                            'error': 'Property context is required. Please login through your property portal.',
-                            'code': 'PROPERTY_CONTEXT_REQUIRED',
-                            'message': 'You must login through the specific property subdomain you own.'
-                        }), 403
+                        # Check if logging in from the admin portal
+                        is_admin_portal = False
+                        if data and data.get('property_subdomain') == 'admin':
+                            is_admin_portal = True
+                        origin_header = request.headers.get('Origin', '')
+                        if not is_admin_portal and ('admin.localhost' in origin_header or 'admin.pms' in origin_header):
+                            is_admin_portal = True
+                        
+                        if is_admin_portal:
+                            from sqlalchemy import text as sa_text
+                            # Auto-detect first property this manager owns
+                            owned_property = db.session.execute(sa_text(
+                                """
+                                SELECT id, portal_subdomain FROM properties
+                                WHERE owner_id = :user_id
+                                LIMIT 1
+                                """
+                            ), {'user_id': user.id}).first()
+                            
+                            if owned_property:
+                                property_id = owned_property[0]
+                                user.auto_detected_subdomain = owned_property[1]
+                                user.auto_detected_property_id = property_id
+                                current_app.logger.debug(f"Auto-detected property {property_id} for PM {user.id} from admin portal")
+                            else:
+                                return jsonify({
+                                    'error': 'You do not own any properties.',
+                                    'code': 'NO_OWNED_PROPERTIES'
+                                }), 403
+                        else:
+                            return jsonify({
+                                'error': 'Property context is required. Please login through your property portal.',
+                                'code': 'PROPERTY_CONTEXT_REQUIRED',
+                                'message': 'You must login through the specific property subdomain you own.'
+                            }), 403
                     
                     # Verify property exists and user owns THIS SPECIFIC property
                     from models.property import Property
