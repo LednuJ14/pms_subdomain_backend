@@ -65,6 +65,8 @@ def create_app(config_name=None):
         "http://localhost:8081",
         "http://pat.localhost:8080",  # Explicitly add the subdomain
         "http://villa.localhost:8080",  # Explicitly add villa subdomain
+        "http://admin.localhost:8080",  # Explicitly add admin subdomain
+        "http://admin.localhost:5173",  # Explicitly add admin subdomain for Vite
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8080",
