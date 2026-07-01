@@ -12,7 +12,7 @@ class Config:
     # Database Configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         f"mysql+pymysql://{os.environ.get('MYSQL_USER', 'root')}:" + \
-        f"{os.environ.get('MYSQL_PASSWORD', 'password')}@" + \
+        f"{os.environ.get('MYSQL_PASSWORD', '')}@" + \
         f"{os.environ.get('MYSQL_HOST', 'localhost')}:" + \
         f"{os.environ.get('MYSQL_PORT', '3306')}/" + \
         f"{os.environ.get('MYSQL_DATABASE', 'property_mngmnt')}"
@@ -37,6 +37,10 @@ class Config:
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 16777216))  # 16MB
     ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx'}
     
+    # Firebase Configuration
+    FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON', '')
+    FIREBASE_DATABASE_URL = os.environ.get('FIREBASE_DATABASE_URL', '')
+
     # Reminder System Configuration
     ENABLE_AUTO_REMINDERS = os.environ.get('ENABLE_AUTO_REMINDERS', 'false').lower() in ['true', 'on', '1']
     REMINDER_API_KEY = os.environ.get('REMINDER_API_KEY', None)  # Optional API key for reminder endpoint
