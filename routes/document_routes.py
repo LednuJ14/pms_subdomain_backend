@@ -130,7 +130,7 @@ def get_documents():
                 # 1. Public or tenants_only (visible to all tenants)
                 # 2. Tenant-specific documents (visibility='private' with tenant_id matching this tenant)
                 # 3. Documents uploaded by them
-                current_app.logger.info(f"Tenant {current_user.id} filtering documents for property_id={tenant_profile.property_id}")
+                current_app.logger.debug(f"Tenant {current_user.id} filtering documents for property_id={tenant_profile.property_id}")
                 query = query.filter(
                     (Document.property_id == tenant_profile.property_id) &
                     (
@@ -141,7 +141,7 @@ def get_documents():
                 )
                 # Log for debugging
                 count_before = query.count()
-                current_app.logger.info(f"Found {count_before} documents for tenant {current_user.id} in property {tenant_profile.property_id}")
+                current_app.logger.debug(f"Found {count_before} documents for tenant {current_user.id} in property {tenant_profile.property_id}")
             else:
                 # If no tenant profile, only show public documents uploaded by them
                 current_app.logger.warning(f"Tenant {current_user.id} has no property_id, showing only public/own documents")
@@ -164,7 +164,7 @@ def get_documents():
                     query = query.filter(Document.visibility.in_(['public', 'tenants_only', 'staff_only']))
             except Exception:
                 query = query.filter(Document.visibility.in_(['public', 'tenants_only', 'staff_only']))
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             # Property managers can only see documents for their current property subdomain
             from routes.auth_routes import get_property_id_from_request
             property_id = get_property_id_from_request()
@@ -388,9 +388,9 @@ def upload_document():
             return jsonify({'error': 'Access denied. Only tenants, staff, and property managers can upload documents.'}), 403
         
         # Debug: Log request information
-        current_app.logger.info(f"Upload request - Content-Type: {request.content_type}")
-        current_app.logger.info(f"Upload request - Files: {list(request.files.keys())}")
-        current_app.logger.info(f"Upload request - Form keys: {list(request.form.keys())}")
+        current_app.logger.debug(f"Upload request - Content-Type: {request.content_type}")
+        current_app.logger.debug(f"Upload request - Files: {list(request.files.keys())}")
+        current_app.logger.debug(f"Upload request - Form keys: {list(request.form.keys())}")
         
         # Check if file is present
         if 'file' not in request.files:
@@ -434,7 +434,7 @@ def upload_document():
         # CRITICAL: Do NOT auto-detect from owned properties for property managers
         # Property managers must access through the correct subdomain
         # If property_id not in request, try to get from JWT token
-        if not property_id and user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        if not property_id and user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             from flask_jwt_extended import get_jwt
             try:
                 claims = get_jwt()
@@ -443,7 +443,7 @@ def upload_document():
                 pass
         
         # CRITICAL: For property managers, verify ownership before allowing upload
-        if property_id and user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        if property_id and user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             try:
                 property_id_int = int(property_id)
                 from models.property import Property
@@ -469,11 +469,11 @@ def upload_document():
                 property_obj = Property.query.get(property_id_int)
                 if property_obj:
                     property_id_final = property_id_int
-                    current_app.logger.info(f"Using property_id: {property_id_final}")
+                    current_app.logger.debug(f"Using property_id: {property_id_final}")
                 else:
                     current_app.logger.warning(f"Property with id {property_id_int} not found")
                     # For property managers, allow upload without valid property_id
-                    if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER']:
+                    if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                         return jsonify({'error': f'Property with id {property_id_int} not found'}), 404
             except (ValueError, TypeError) as e:
                 # If not a number, try to find by subdomain
@@ -491,16 +491,16 @@ def upload_document():
                     ), {'subdomain': str(property_id)}).first()
                     if property_obj:
                         property_id_final = property_obj[0]
-                        current_app.logger.info(f"Found property {property_id_final} by subdomain/name: {property_id}")
+                        current_app.logger.debug(f"Found property {property_id_final} by subdomain/name: {property_id}")
                     else:
                         current_app.logger.warning(f"Property not found by subdomain/name: {property_id}")
                         # For property managers, allow upload without valid property_id
-                        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER']:
+                        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                             return jsonify({'error': f'Property not found: {property_id}'}), 404
                 except Exception as lookup_error:
                     current_app.logger.error(f"Error looking up property by subdomain: {str(lookup_error)}")
                     # For property managers, allow upload even if lookup fails
-                    if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER']:
+                    if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                         return jsonify({'error': 'Invalid property_id'}), 400
         
         # For tenant-visible documents (tenants_only, public), property_id is REQUIRED
@@ -609,7 +609,7 @@ def upload_document():
         db.session.add(document)
         db.session.commit()
         
-        current_app.logger.info(f"Document uploaded: {document.id} by user {current_user.id}")
+        current_app.logger.debug(f"Document uploaded: {document.id} by user {current_user.id}")
         
         return jsonify({
             'message': 'Document uploaded successfully',
@@ -835,7 +835,7 @@ def update_document(document_id):
                 return jsonify({'error': 'Access denied. You can only update your own documents.'}), 403
             
             # CRITICAL: For property managers, verify property ownership
-            if user_role_str in ['MANAGER', 'PROPERTY_MANAGER'] and document.property_id:
+            if user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN'] and document.property_id:
                 from models.property import Property
                 property_obj = Property.query.get(document.property_id)
                 if not property_obj:
@@ -883,7 +883,7 @@ def update_document(document_id):
         
         db.session.commit()
         
-        current_app.logger.info(f"Document updated: {document_id} by user {current_user.id}")
+        current_app.logger.debug(f"Document updated: {document_id} by user {current_user.id}")
         
         return jsonify({
             'message': 'Document updated successfully',
@@ -952,7 +952,7 @@ def delete_document(document_id):
                 return jsonify({'error': 'Access denied. You can only delete your own documents.'}), 403
             
             # CRITICAL: For property managers, verify property ownership
-            if user_role_str in ['MANAGER', 'PROPERTY_MANAGER'] and document.property_id:
+            if user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN'] and document.property_id:
                 from models.property import Property
                 property_obj = Property.query.get(document.property_id)
                 if not property_obj:
@@ -975,7 +975,7 @@ def delete_document(document_id):
         db.session.delete(document)
         db.session.commit()
         
-        current_app.logger.info(f"Document deleted: {document_id} by user {current_user.id}")
+        current_app.logger.debug(f"Document deleted: {document_id} by user {current_user.id}")
         
         return jsonify({'message': 'Document deleted successfully'}), 200
         
@@ -1103,7 +1103,7 @@ def get_documents_by_property(property_id):
         
         # Allow managers, property managers, and tenants (for their own property)
         # Note: This endpoint is for main domain access (subdomain doesn't have admin role)
-        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER']:
+        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             # Check if user is a tenant and this is their property
             if user_role_str == 'TENANT':
                 try:

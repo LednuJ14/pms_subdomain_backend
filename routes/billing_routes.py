@@ -223,7 +223,7 @@ def get_bills():
         else:
             user_role = str(current_user.role).upper()
         
-        if user_role in ['MANAGER', 'PROPERTY_MANAGER']:
+        if user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             property_obj = Property.query.get(property_id)
             if not property_obj:
                 return jsonify({'error': 'Property not found'}), 404
@@ -793,7 +793,7 @@ def delete_bill(current_user, bill_id):
             else:
                 user_role = str(current_user.role).upper()
             
-            if user_role in ['MANAGER', 'PROPERTY_MANAGER']:
+            if user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                 try:
                     managed_property = Property.query.filter_by(
                         manager_id=current_user.id
@@ -1065,7 +1065,7 @@ def approve_payment(current_user, payment_id):
             else:
                 user_role = str(current_user.role).upper()
             
-            if user_role in ['MANAGER', 'PROPERTY_MANAGER']:
+            if user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                 try:
                     managed_property = Property.query.filter_by(
                         manager_id=current_user.id
@@ -1204,7 +1204,7 @@ def approve_payment(current_user, payment_id):
                                 'move_out_date': new_rent_end
                             })
                         
-                        current_app.logger.info(
+                        current_app.logger.debug(
                             f"Auto-updated monthly rent period for tenant {bill.tenant_id}, unit {bill.unit_id} "
                             f"to {new_rent_start} - {new_rent_end} (period_days={period_days})"
                         )
@@ -1304,7 +1304,7 @@ def reject_payment(current_user, payment_id):
             else:
                 user_role = str(current_user.role).upper()
             
-            if user_role in ['MANAGER', 'PROPERTY_MANAGER']:
+            if user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                 try:
                     managed_property = Property.query.filter_by(
                         manager_id=current_user.id
@@ -1427,7 +1427,7 @@ def get_payments():
             else:
                 user_role = str(current_user.role).upper()
             
-            if user_role in ['MANAGER', 'PROPERTY_MANAGER']:
+            if user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                 try:
                     # Get the first managed property
                     managed_property = Property.query.filter_by(
@@ -1600,7 +1600,7 @@ def get_bills_dashboard():
             else:
                 user_role = str(current_user.role).upper()
             
-            if user_role in ['MANAGER', 'PROPERTY_MANAGER']:
+            if user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                 try:
                     # Get the first managed property
                     managed_property = Property.query.filter_by(

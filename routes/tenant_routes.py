@@ -82,7 +82,7 @@ def get_tenants_internal():
     
     # Log entry point
     try:
-        current_app.logger.info("get_tenants_internal: Starting")
+        current_app.logger.debug("get_tenants_internal: Starting")
     except:
         pass  # If logging fails, continue anyway
     
@@ -95,7 +95,7 @@ def get_tenants_internal():
         try:
             property_id = request.args.get('property_id', type=int)
             if property_id:
-                current_app.logger.info(f"Got property_id from query param: {property_id}")
+                current_app.logger.debug(f"Got property_id from query param: {property_id}")
         except Exception as query_err:
             current_app.logger.warning(f"Error getting property_id from query: {str(query_err)}")
         
@@ -105,7 +105,7 @@ def get_tenants_internal():
                 from routes.auth_routes import get_property_id_from_request
                 property_id = get_property_id_from_request()
                 if property_id:
-                    current_app.logger.info(f"Got property_id from get_property_id_from_request: {property_id}")
+                    current_app.logger.debug(f"Got property_id from get_property_id_from_request: {property_id}")
             except Exception as prop_id_err:
                 current_app.logger.warning(f"Error getting property_id from request: {str(prop_id_err)}")
         
@@ -116,7 +116,7 @@ def get_tenants_internal():
                 claims = get_jwt()
                 property_id = claims.get('property_id')
                 if property_id:
-                    current_app.logger.info(f"Got property_id from JWT: {property_id}")
+                    current_app.logger.debug(f"Got property_id from JWT: {property_id}")
             except Exception as jwt_err:
                 current_app.logger.warning(f"Error getting property_id from JWT: {str(jwt_err)}")
         
@@ -166,7 +166,7 @@ def get_tenants_internal():
             current_app.logger.warning(f"Error in auth check: {str(auth_check_err)}")
             # Continue anyway - don't block the request
         
-        current_app.logger.info(f"Getting tenants for property_id: {property_id}")
+        current_app.logger.debug(f"Getting tenants for property_id: {property_id}")
         
         # Load tenants with user relationship, FILTERED BY PROPERTY_ID
         tenants = []
@@ -185,7 +185,7 @@ def get_tenants_internal():
                     # Fallback to even simpler query
                     current_app.logger.warning(f"Simple query failed, using basic query: {str(simple_err)}")
                     tenants = Tenant.query.filter_by(property_id=property_id).all()
-            current_app.logger.info(f"Found {len(tenants)} tenants in database for property {property_id}")
+            current_app.logger.debug(f"Found {len(tenants)} tenants in database for property {property_id}")
         except Exception as query_err:
             current_app.logger.error(f"Error querying tenants: {str(query_err)}", exc_info=True)
             tenants = []  # Set to empty list on error
@@ -252,7 +252,7 @@ def get_tenants_internal():
             tenant_list = []
         
         # Log success
-        current_app.logger.info(f"Successfully returning {len(tenant_list)} tenants for property {property_id}")
+        current_app.logger.debug(f"Successfully returning {len(tenant_list)} tenants for property {property_id}")
         
         # Return as array (frontend handles both array and {tenants: []} format)
         response = jsonify(tenant_list)
@@ -660,7 +660,7 @@ def create_tenant():
                     ), {'unit_id': unit_id})
                     db.session.flush()
 
-                    current_app.logger.info(
+                    current_app.logger.debug(
                         f"Created TenantUnit: tenant_id={tenant.id}, unit_id={unit_id}, "
                         f"and updated unit status to 'occupied'"
                     )
@@ -1022,7 +1022,7 @@ def update_tenant(tenant_id):
                     ), {'unit_id': unit_id})
                     db.session.flush()
 
-                    current_app.logger.info(
+                    current_app.logger.debug(
                         f"Updated TenantUnit: tenant_id={tenant.id}, unit_id={unit_id}, "
                         f"and updated unit status to 'occupied'"
                     )
@@ -1078,7 +1078,7 @@ def update_tenant(tenant_id):
                         db.session.execute(text(
                             "UPDATE units SET status = 'vacant' WHERE id = :unit_id"
                         ), {'unit_id': old_unit_id})
-                        current_app.logger.info(f"Removed tenant from unit {old_unit_id} and updated status to 'vacant'")
+                        current_app.logger.debug(f"Removed tenant from unit {old_unit_id} and updated status to 'vacant'")
             except Exception as unit_error:
                 current_app.logger.warning(f"Error removing unit assignment: {str(unit_error)}")
                 # Don't fail the entire update if unit removal fails
@@ -1262,7 +1262,7 @@ def verify_tenant(tenant_id):
         
         db.session.commit()
         
-        current_app.logger.info(f"Tenant {tenant_id} (user {user.id}) verified and activated by property manager {current_user_id}")
+        current_app.logger.debug(f"Tenant {tenant_id} (user {user.id}) verified and activated by property manager {current_user_id}")
         
         return jsonify({
             'message': 'Tenant verified and activated successfully',

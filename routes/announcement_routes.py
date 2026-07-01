@@ -219,7 +219,7 @@ def get_announcements():
                 current_app.logger.warning(f"Error filtering announcements for tenant: {str(tenant_error)}")
                 # Fallback: show only global announcements if tenant filtering fails
                 query = query.filter(Announcement.property_id.is_(None))
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             # Property managers can only see announcements for their current property subdomain
             from routes.auth_routes import get_property_id_from_request
             property_id = get_property_id_from_request()
@@ -573,7 +573,7 @@ def create_announcement():
                 }), 500
             return jsonify({'error': 'Failed to create announcement. Please check the data and try again.'}), 500
         
-        current_app.logger.info(f"Announcement created: {announcement.id} by user {current_user.id}")
+        current_app.logger.debug(f"Announcement created: {announcement.id} by user {current_user.id}")
         
         # Create notifications for all tenants in the property when announcement is published
         if is_published and property_id:
@@ -684,11 +684,11 @@ def update_announcement(announcement_id):
         else:
             user_role_str = str(user_role).upper() if user_role else ''
         
-        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER'] and announcement.published_by != current_user.id:
+        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN'] and announcement.published_by != current_user.id:
             return jsonify({'error': 'You can only edit announcements you created'}), 403
         
         # CRITICAL: For property managers, verify property ownership
-        if user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        if user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             if announcement.property_id:
                 from models.property import Property
                 property_obj = Property.query.get(announcement.property_id)
@@ -768,7 +768,7 @@ def update_announcement(announcement_id):
         # They are handled as properties in the model for backward compatibility
         db.session.commit()
         
-        current_app.logger.info(f"Announcement updated: {announcement_id} by user {current_user.id}")
+        current_app.logger.debug(f"Announcement updated: {announcement_id} by user {current_user.id}")
         
         return jsonify({
             'message': 'Announcement updated successfully',
@@ -836,7 +836,7 @@ def delete_announcement(announcement_id):
             user_role_str = str(user_role).upper() if user_role else ''
         
         # Only property managers can delete
-        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER']:
+        if user_role_str not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             return jsonify({'error': 'Only property managers can delete announcements'}), 403
         
         # CRITICAL: Verify property ownership
@@ -868,7 +868,7 @@ def delete_announcement(announcement_id):
         announcement.is_published = False
         db.session.commit()
         
-        current_app.logger.info(f"Announcement deleted: {announcement_id} by user {current_user.id}")
+        current_app.logger.debug(f"Announcement deleted: {announcement_id} by user {current_user.id}")
         
         return jsonify({'message': 'Announcement deleted successfully'}), 200
         

@@ -170,16 +170,16 @@ def get_feedback():
             if property_id:
                 query = query.filter(Feedback.property_id == property_id)
         
-        # Property managers and staff can see all feedback for their property
-        elif user_role in ['MANAGER', 'PROPERTY_MANAGER']:
-            # CRITICAL: Property managers MUST provide property_id
+        # Property managers, admin, and staff can see all feedback for their property
+        elif user_role in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
+            # CRITICAL: Property managers/admins MUST provide property_id
             if not property_id:
                 return jsonify({
                     'error': 'Property context is required. Please access through a property subdomain.',
                     'code': 'PROPERTY_CONTEXT_REQUIRED'
                 }), 400
             
-            # CRITICAL: Verify property exists and user owns it
+            # CRITICAL: Verify property exists and user owns it (if not admin)
             property_obj = Property.query.get(property_id)
             if not property_obj:
                 return jsonify({'error': 'Property not found'}), 404
@@ -720,8 +720,8 @@ def update_feedback(feedback_id):
                 'feedback': feedback_dict
             }), 200
 
-        # Only property managers can update status/response
-        if user_role not in ['MANAGER', 'PROPERTY_MANAGER']:
+        # Only property managers and admins can update status/response
+        if user_role not in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             return jsonify({'error': 'Access denied. Staff cannot update feedback status.'}), 403
 
         # Get property_id from request
@@ -807,8 +807,8 @@ def get_feedback_dashboard():
         else:
             user_role = str(current_user.role).upper()
         
-        # Only property managers and staff can see dashboard
-        if user_role not in ['MANAGER', 'PROPERTY_MANAGER', 'STAFF']:
+        # Only property managers, admins and staff can see dashboard
+        if user_role not in ['MANAGER', 'PROPERTY_MANAGER', 'STAFF', 'ADMIN']:
             return jsonify({'error': 'Access denied'}), 403
         
         # Get property_id from request

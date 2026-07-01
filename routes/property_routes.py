@@ -609,7 +609,7 @@ def get_property_units(property_id):
         # This is needed because in subdomain context, the user might be a property manager
         # who manages the property but isn't the owner
         # We only verify that the property exists and user is authenticated
-        current_app.logger.info(f"Allowing unit access for authenticated user {current_user_id} to property {property_id} (subdomain context)")
+        current_app.logger.debug(f"Allowing unit access for authenticated user {current_user_id} to property {property_id} (subdomain context)")
         
         # Get all units for this property - use raw SQL to avoid enum validation issues
         try:
@@ -738,7 +738,7 @@ def get_property_by_subdomain():
             return jsonify({'error': 'Subdomain not provided'}), 400
             
         if subdomain.lower() == 'admin':
-            return jsonify({'id': -1, 'name': 'System Admin', 'portal_subdomain': 'admin', 'display_settings': {}}), 200
+            return jsonify({'id': -1, 'name': 'PMS', 'portal_subdomain': 'admin', 'display_settings': {}}), 200
         
         # Normalize subdomain (remove numeric suffixes like -11)
         import re

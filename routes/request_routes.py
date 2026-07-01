@@ -152,7 +152,7 @@ def get_requests():
             query = MaintenanceRequest.query.filter_by(tenant_id=tenant.id)
             if property_id:
                 query = query.filter_by(property_id=property_id)
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             # Property managers can see all requests for their property
             if not property_id:
                 return jsonify({
@@ -430,7 +430,7 @@ def create_request():
         try:
             from services.notification_service import NotificationService
             NotificationService.notify_request_created(maintenance_request)
-            current_app.logger.info(f"Created tenant notification for request {maintenance_request.id} (tenant {tenant.id})")
+            current_app.logger.debug(f"Created tenant notification for request {maintenance_request.id} (tenant {tenant.id})")
         except Exception as notif_error:
             # Don't fail request creation if notification fails
             current_app.logger.warning(f"Failed to create tenant notification for request {maintenance_request.id}: {str(notif_error)}")
@@ -439,7 +439,7 @@ def create_request():
         try:
             from services.notification_service import NotificationService
             NotificationService.notify_pm_new_request(maintenance_request)
-            current_app.logger.info(f"Created PM notification for request {maintenance_request.id} (property {property_id})")
+            current_app.logger.debug(f"Created PM notification for request {maintenance_request.id} (property {property_id})")
         except Exception as notif_error:
             # Don't fail request creation if notification fails
             current_app.logger.warning(f"Failed to create PM notification for request {maintenance_request.id}: {str(notif_error)}")
