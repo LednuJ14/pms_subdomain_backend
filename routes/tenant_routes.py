@@ -609,13 +609,12 @@ def create_tenant():
                         try:
                             db.session.execute(text(
                                 """
-                                INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date, rent_start_date, rent_end_date, is_active, created_at, updated_at)
-                                VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date, :rent_start_date, :rent_end_date, :is_active, NOW(), NOW())
+                                INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date, rent_start_date, rent_end_date, is_active, created_at, updated_at)
+                                VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date, :rent_start_date, :rent_end_date, :is_active, NOW(), NOW())
                                 """
                             ), {
                                 'tenant_id': tenant.id,
                                 'unit_id': unit_id,
-                                'property_id': unit_property_id,
                                 'move_in_date': move_in_date,
                                 'move_out_date': move_out_date,
                                 'rent_start_date': rent_start_date,
@@ -624,30 +623,28 @@ def create_tenant():
                             })
                         except Exception as rent_dates_error:
                             current_app.logger.warning(f"rent_start_date/rent_end_date columns may not exist, using move dates only: {str(rent_dates_error)}")
-                        db.session.execute(text(
-                            """
-                            INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date, is_active, created_at, updated_at)
-                            VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date, :is_active, NOW(), NOW())
-                            """
-                        ), {
-                            'tenant_id': tenant.id,
-                            'unit_id': unit_id,
-                            'property_id': unit_property_id,
-                            'move_in_date': move_in_date,
-                            'move_out_date': move_out_date,
-                            'is_active': True
-                        })
-                    except Exception as insert_error:
-                        if 'is_active' in str(insert_error) or 'created_at' in str(insert_error) or 'updated_at' in str(insert_error):
                             db.session.execute(text(
                                 """
-                                INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date)
-                                VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date)
+                                INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date, is_active, created_at, updated_at)
+                                VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date, :is_active, NOW(), NOW())
                                 """
                             ), {
                                 'tenant_id': tenant.id,
                                 'unit_id': unit_id,
-                                'property_id': unit_property_id,
+                                'move_in_date': move_in_date,
+                                'move_out_date': move_out_date,
+                                'is_active': True
+                            })
+                    except Exception as insert_error:
+                        if 'is_active' in str(insert_error) or 'created_at' in str(insert_error) or 'updated_at' in str(insert_error):
+                            db.session.execute(text(
+                                """
+                                INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date)
+                                VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date)
+                                """
+                            ), {
+                                'tenant_id': tenant.id,
+                                'unit_id': unit_id,
                                 'move_in_date': move_in_date,
                                 'move_out_date': move_out_date
                             })
@@ -959,13 +956,12 @@ def update_tenant(tenant_id):
                         try:
                             db.session.execute(text(
                                 """
-                                INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date, rent_start_date, rent_end_date, is_active, created_at, updated_at)
-                                VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date, :rent_start_date, :rent_end_date, :is_active, NOW(), NOW())
+                                INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date, rent_start_date, rent_end_date, is_active, created_at, updated_at)
+                                VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date, :rent_start_date, :rent_end_date, :is_active, NOW(), NOW())
                                 """
                             ), {
                                 'tenant_id': tenant.id,
                                 'unit_id': unit_id,
-                                'property_id': unit_property_id,
                                 'move_in_date': move_in_date,
                                 'move_out_date': move_out_date,
                                 'rent_start_date': rent_start_date,
@@ -974,31 +970,29 @@ def update_tenant(tenant_id):
                             })
                         except Exception as rent_dates_error:
                             current_app.logger.warning(f"rent_start_date/rent_end_date columns may not exist, using move dates only: {str(rent_dates_error)}")
-                        db.session.execute(text(
-                            """
-                            INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date, is_active, created_at, updated_at)
-                            VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date, :is_active, NOW(), NOW())
-                            """
-                        ), {
-                            'tenant_id': tenant.id,
-                            'unit_id': unit_id,
-                            'property_id': unit_property_id,
-                            'move_in_date': move_in_date,
-                            'move_out_date': move_out_date,
-                            'is_active': True
-                        })
+                            db.session.execute(text(
+                                """
+                                INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date, is_active, created_at, updated_at)
+                                VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date, :is_active, NOW(), NOW())
+                                """
+                            ), {
+                                'tenant_id': tenant.id,
+                                'unit_id': unit_id,
+                                'move_in_date': move_in_date,
+                                'move_out_date': move_out_date,
+                                'is_active': True
+                            })
                     except Exception as insert_error:
                         if 'is_active' in str(insert_error) or 'created_at' in str(insert_error) or 'updated_at' in str(insert_error):
                             try:
                                 db.session.execute(text(
                                     """
-                                    INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date, rent_start_date, rent_end_date)
-                                    VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date, :rent_start_date, :rent_end_date)
+                                    INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date, rent_start_date, rent_end_date)
+                                    VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date, :rent_start_date, :rent_end_date)
                                     """
                                 ), {
                                     'tenant_id': tenant.id,
                                     'unit_id': unit_id,
-                                    'property_id': unit_property_id,
                                     'move_in_date': move_in_date,
                                     'move_out_date': move_out_date,
                                     'rent_start_date': rent_start_date,
@@ -1007,13 +1001,12 @@ def update_tenant(tenant_id):
                             except Exception:
                                 db.session.execute(text(
                                     """
-                                    INSERT INTO tenant_units (tenant_id, unit_id, property_id, move_in_date, move_out_date)
-                                    VALUES (:tenant_id, :unit_id, :property_id, :move_in_date, :move_out_date)
+                                    INSERT INTO tenant_units (tenant_id, unit_id, move_in_date, move_out_date)
+                                    VALUES (:tenant_id, :unit_id, :move_in_date, :move_out_date)
                                     """
                                 ), {
                                     'tenant_id': tenant.id,
                                     'unit_id': unit_id,
-                                    'property_id': unit_property_id,
                                     'move_in_date': move_in_date,
                                     'move_out_date': move_out_date
                                 })
