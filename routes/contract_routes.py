@@ -391,6 +391,9 @@ def activate_contract(current_user, contract_id):
 def sign_contract_tenant(current_user, contract_id):
     """Sign contract as tenant."""
     try:
+        data = request.get_json() or {}
+        signature_base64 = data.get('signature_base64')
+        
         contract = RentalContract.query.get(contract_id)
         if not contract:
             return jsonify({'error': 'Contract not found'}), 404
@@ -403,7 +406,53 @@ def sign_contract_tenant(current_user, contract_id):
         if contract.tenant_signed:
             return jsonify({'error': 'Contract already signed by tenant'}), 400
         
-        contract.sign_by_tenant()
+        signature_url = None
+        if signature_base64:
+            from utils.cloudinary_helpers import upload_to_cloudinary
+            import base64
+            import tempfile
+            import os
+            try:
+                # Remove data URL scheme if present
+                if ',' in signature_base64:
+                    signature_base64 = signature_base64.split(',')[1]
+                
+                # Decode base64
+                img_data = base64.b64decode(signature_base64)
+                
+                # Write to temp file for upload
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                    temp_file.write(img_data)
+                    temp_file_path = temp_file.name
+                
+                # Create a file-like object with a filename attribute for the helper
+                class MockFile:
+                    def __init__(self, path):
+                        self.path = path
+                        self.filename = os.path.basename(path)
+                    def save(self, dest):
+                        import shutil
+                        shutil.copy(self.path, dest)
+                
+                mock_file = MockFile(temp_file_path)
+                success, file_path, error = upload_to_cloudinary(
+                    mock_file, 
+                    folder=f"PMS/signatures"
+                )
+                
+                os.unlink(temp_file_path)
+                
+                if success:
+                    signature_url = file_path
+                else:
+                    current_app.logger.error(f"Failed to upload signature: {error}")
+            except Exception as e:
+                current_app.logger.error(f"Error processing signature: {e}")
+        
+        ip_address = request.remote_addr
+        user_agent = request.user_agent.string
+        
+        contract.sign_by_tenant(signature_url=signature_url, ip=ip_address, user_agent=user_agent)
         
         return jsonify({
             'message': 'Contract signed by tenant successfully',
@@ -421,6 +470,9 @@ def sign_contract_tenant(current_user, contract_id):
 def sign_contract_landlord(current_user, contract_id):
     """Sign contract as landlord/property manager."""
     try:
+        data = request.get_json() or {}
+        signature_base64 = data.get('signature_base64')
+        
         contract = RentalContract.query.get(contract_id)
         if not contract:
             return jsonify({'error': 'Contract not found'}), 404
@@ -428,7 +480,49 @@ def sign_contract_landlord(current_user, contract_id):
         if contract.landlord_signed:
             return jsonify({'error': 'Contract already signed by landlord'}), 400
         
-        contract.sign_by_landlord(current_user.id)
+        signature_url = None
+        if signature_base64:
+            from utils.cloudinary_helpers import upload_to_cloudinary
+            import base64
+            import tempfile
+            import os
+            try:
+                if ',' in signature_base64:
+                    signature_base64 = signature_base64.split(',')[1]
+                
+                img_data = base64.b64decode(signature_base64)
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                    temp_file.write(img_data)
+                    temp_file_path = temp_file.name
+                
+                class MockFile:
+                    def __init__(self, path):
+                        self.path = path
+                        self.filename = os.path.basename(path)
+                    def save(self, dest):
+                        import shutil
+                        shutil.copy(self.path, dest)
+                
+                mock_file = MockFile(temp_file_path)
+                success, file_path, error = upload_to_cloudinary(
+                    mock_file, 
+                    folder=f"PMS/signatures"
+                )
+                
+                os.unlink(temp_file_path)
+                
+                if success:
+                    signature_url = file_path
+                else:
+                    current_app.logger.error(f"Failed to upload signature: {error}")
+            except Exception as e:
+                current_app.logger.error(f"Error processing signature: {e}")
+                
+        ip_address = request.remote_addr
+        user_agent = request.user_agent.string
+        
+        contract.sign_by_landlord(current_user.id, signature_url=signature_url, ip=ip_address, user_agent=user_agent)
         
         return jsonify({
             'message': 'Contract signed by landlord successfully',

@@ -700,6 +700,12 @@ def download_document(document_id):
             except Exception:
                 current_app.logger.warning('JWT decode failed for document download; allowing request for development')
         file_path = document.file_path
+        
+        # Handle external URLs (like Cloudinary)
+        if file_path and (file_path.startswith('http://') or file_path.startswith('https://')):
+            from flask import redirect
+            return redirect(file_path)
+            
         if not os.path.exists(file_path):
             regenerated_path = None
             try:
@@ -707,8 +713,10 @@ def download_document(document_id):
                 contract_number = None
                 filename = document.filename or ''
                 lower_name = filename.lower()
-                if document.document_type == 'lease' and lower_name.startswith('rental_contract_') and lower_name.endswith('.pdf'):
-                    contract_number = filename[len('rental_contract_'):-4]
+                if document.document_type == 'lease' and lower_name.startswith('rental_contract_') and (lower_name.endswith('.pdf') or lower_name.endswith('.docx')):
+                    # Handle both .pdf and .docx
+                    ext_len = 4 if lower_name.endswith('.pdf') else 5
+                    contract_number = filename[len('rental_contract_'):-ext_len]
                 contract = None
                 if contract_number:
                     contract = RentalContract.query.filter_by(contract_number=contract_number).first()
@@ -721,6 +729,12 @@ def download_document(document_id):
                         db.session.commit()
             except Exception as regen_error:
                 current_app.logger.error(f"Download regeneration error: {str(regen_error)}")
+            
+            # If regenerated path is a URL, redirect to it
+            if regenerated_path and (regenerated_path.startswith('http://') or regenerated_path.startswith('https://')):
+                from flask import redirect
+                return redirect(regenerated_path)
+                
             if regenerated_path and os.path.exists(regenerated_path):
                 file_path = regenerated_path
             else:
