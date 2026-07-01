@@ -563,9 +563,7 @@ def login():
             ).first()
         except Exception as query_error:
             current_app.logger.error(f"Database query error: {str(query_error)}", exc_info=True)
-            if current_app.config.get('DEBUG', False):
-                return jsonify({'error': 'Database query failed', 'details': str(query_error)}), 500
-            return jsonify({'error': 'Login failed'}), 500
+            return jsonify({'error': f"DB Error: {str(query_error)}"}), 500
         
         if not user:
             current_app.logger.warning(f"Login attempt failed - user not found: {email_or_username}")
@@ -598,9 +596,7 @@ def login():
                 db.session.commit()
         except Exception as attr_error:
             current_app.logger.error(f"Error checking user status: {str(attr_error)}", exc_info=True)
-            if current_app.config.get('DEBUG', False):
-                return jsonify({'error': 'Error checking user status', 'details': str(attr_error)}), 500
-            return jsonify({'error': 'Login failed'}), 500
+            return jsonify({'error': f"Attr Error: {str(attr_error)}"}), 500
         
         # Verify password
         try:
@@ -652,29 +648,16 @@ def login():
                 return jsonify({'error': 'Invalid credentials'}), 401
         except Exception as pwd_error:
             current_app.logger.error(f"Password check error: {str(pwd_error)}", exc_info=True)
-            if current_app.config.get('DEBUG', False):
-                return jsonify({
-                    'error': 'Password verification failed', 
-                    'details': str(pwd_error),
-                    'debug': {
-                        'user_id': user.id,
-                        'email': user.email,
-                        'exception_type': type(pwd_error).__name__
-                    }
-                }), 500
-            return jsonify({'error': 'Login failed'}), 500
+            return jsonify({'error': f"PWD Error: {str(pwd_error)}"}), 500
         
         # Log successful password verification
         current_app.logger.info(f"Password verified successfully for user_id={user.id}, role={user.role}")
         
-        # Block ADMIN users from logging into subdomain
+        # Allow ADMIN users to login to subdomain
         user_role_str = str(user.role).upper() if user.role else ''
         if user_role_str == 'ADMIN':
-            current_app.logger.warning(f"Admin login attempt blocked - admin {user.id} tried to login to subdomain")
-            return jsonify({
-                'error': 'Admin accounts cannot access property subdomains. Please use the main domain portal.',
-                'code': 'ADMIN_SUBDOMAIN_BLOCKED'
-            }), 403
+            current_app.logger.info(f"Admin {user.id} logging into subdomain")
+            pass
         
         # Check if 2FA is enabled - send email code if enabled (like main domain)
         if getattr(user, 'two_factor_enabled', False):
@@ -929,52 +912,58 @@ def login():
         # Property managers can ONLY login to property subdomains they own
         elif user.is_property_manager():
             try:
-                # Get property_id from request (subdomain, header, query param, or body)
-                property_id = get_property_id_from_request(data=data)
-                
-                # Log for debugging
-                current_app.logger.info(f"Property manager login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
-                
-                if not property_id:
-                    return jsonify({
-                        'error': 'Property context is required. Please login through your property portal.',
-                        'code': 'PROPERTY_CONTEXT_REQUIRED',
-                        'message': 'You must login through the specific property subdomain you own.'
-                    }), 403
-                
-                # Verify property exists and user owns THIS SPECIFIC property
-                from models.property import Property
-                property_obj = Property.query.get(property_id)
-                if not property_obj:
-                    return jsonify({
-                        'error': 'Property not found',
-                        'code': 'PROPERTY_NOT_FOUND'
-                    }), 404
-                
-                # CRITICAL: Verify the property manager owns this property
-                if property_obj.owner_id != user.id and not is_super_admin(user.id):
-                    property_name = property_obj.name if property_obj else f"Property {property_id}"
+                # If user is a Super Admin, skip property verification entirely
+                user_role_str = str(user.role).upper() if user.role else ''
+                if user_role_str == 'ADMIN':
+                    current_app.logger.info(f"Super Admin {user.id} bypassing property verification")
+                    pass # Skip the rest of the property checks for admin
+                else:
+                    # Get property_id from request (subdomain, header, query param, or body)
+                    property_id = get_property_id_from_request(data=data)
                     
-                    # Get property manager's owned properties for helpful error message
-                    owned_properties = Property.query.filter_by(owner_id=user.id).all()
-                    owned_property_names = [p.name for p in owned_properties] if owned_properties else []
+                    # Log for debugging
+                    current_app.logger.info(f"Property manager login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
                     
-                    error_msg = f'You do not own {property_name}.'
-                    if owned_property_names:
-                        error_msg += f' You can only access: {", ".join(owned_property_names)}'
-                    else:
-                        error_msg += ' You do not own any properties.'
+                    if not property_id:
+                        return jsonify({
+                            'error': 'Property context is required. Please login through your property portal.',
+                            'code': 'PROPERTY_CONTEXT_REQUIRED',
+                            'message': 'You must login through the specific property subdomain you own.'
+                        }), 403
                     
-                    return jsonify({
-                        'error': error_msg,
-                        'code': 'PROPERTY_ACCESS_DENIED',
-                        'property_id': property_id,
-                        'attempted_property': property_name,
-                        'owned_properties': owned_property_names
-                    }), 403
-                
-                # Log successful property validation
-                current_app.logger.info(f"Property manager {user.id} validated for property {property_id}")
+                    # Verify property exists and user owns THIS SPECIFIC property
+                    from models.property import Property
+                    property_obj = Property.query.get(property_id)
+                    if not property_obj:
+                        return jsonify({
+                            'error': 'Property not found',
+                            'code': 'PROPERTY_NOT_FOUND'
+                        }), 404
+                    
+                    # CRITICAL: Verify the property manager owns this property
+                    if property_obj.owner_id != user.id and not is_super_admin(user.id):
+                        property_name = property_obj.name if property_obj else f"Property {property_id}"
+                        
+                        # Get property manager's owned properties for helpful error message
+                        owned_properties = Property.query.filter_by(owner_id=user.id).all()
+                        owned_property_names = [p.name for p in owned_properties] if owned_properties else []
+                        
+                        error_msg = f'You do not own {property_name}.'
+                        if owned_property_names:
+                            error_msg += f' You can only access: {", ".join(owned_property_names)}'
+                        else:
+                            error_msg += ' You do not own any properties.'
+                        
+                        return jsonify({
+                            'error': error_msg,
+                            'code': 'PROPERTY_ACCESS_DENIED',
+                            'property_id': property_id,
+                            'attempted_property': property_name,
+                            'owned_properties': owned_property_names
+                        }), 403
+                    
+                    # Log successful property validation
+                    current_app.logger.info(f"Property manager {user.id} validated for property {property_id}")
                 
             except Exception as pm_check_error:
                 current_app.logger.error(f"Error checking property manager property access: {str(pm_check_error)}", exc_info=True)
@@ -1102,8 +1091,8 @@ def login():
                 'type': type(e).__name__
             }), 500
         else:
-            # Don't expose internal error details to client in production
-            return jsonify({'error': 'Login failed'}), 500
+            # Temporarily expose error for debugging admin login
+            return jsonify({'error': f"Global Error: {str(e)}"}), 500
 
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
