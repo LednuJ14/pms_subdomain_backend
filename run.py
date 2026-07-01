@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     # Run the application
     # Use a distinct default port to avoid clashing with main-domain backend
-    port = int(os.environ.get('PORT', 5001))
+    port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') == 'development'
     
     print("="*50)

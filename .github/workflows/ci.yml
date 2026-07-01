@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate Image Tag
+        run: echo "IMAGE_TAG=prod-${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          builder: ${{ steps.buildx.outputs.name }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/pms-subdomain-backend:main
+            ${{ secrets.DOCKERHUB_USERNAME }}/pms-subdomain-backend:${{ env.IMAGE_TAG }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/pms-subdomain-backend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/pms-subdomain-backend:buildcache,mode=max
+
+  deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy Backend to Production via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: 22
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+
+            echo "Logging into Docker Hub..."
+            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+
+            echo "Navigating to backend deployment folder..."
+            cd deployment-scripts/pms-subdomain/pms-subdomain-backend/
+
+            echo "Creating .env.prod..."
+            rm -f .env.prod
+            touch .env.prod
+
+            # DATABASE VARS
+            echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" >> .env.prod
+            echo "MYSQL_PORT=${{ secrets.MYSQL_PORT }}" >> .env.prod
+            echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env.prod
+            echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env.prod
+            echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env.prod
+
+            # FLASK
+            echo "FLASK_ENV=production" >> .env.prod
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env.prod
+
+            # JWT
+            echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> .env.prod
+            echo "JWT_ACCESS_TOKEN_EXPIRES=${{ secrets.JWT_ACCESS_TOKEN_EXPIRES }}" >> .env.prod
+
+            # MAIL
+            echo "MAIL_SERVER=${{ secrets.MAIL_SERVER }}" >> .env.prod
+            echo "MAIL_PORT=${{ secrets.MAIL_PORT }}" >> .env.prod
+            echo "MAIL_USE_TLS=${{ secrets.MAIL_USE_TLS }}" >> .env.prod
+            echo "MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}" >> .env.prod
+            echo "MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}" >> .env.prod
+
+            # UPLOAD & REMINDERS
+            echo "UPLOAD_FOLDER=${{ secrets.UPLOAD_FOLDER }}" >> .env.prod
+            echo "MAX_CONTENT_LENGTH=${{ secrets.MAX_CONTENT_LENGTH }}" >> .env.prod
+            echo "ENABLE_AUTO_REMINDERS=${{ secrets.ENABLE_AUTO_REMINDERS }}" >> .env.prod
+
+            # CI/CD Metadata
+            echo "APP_VERSION=${{ env.IMAGE_TAG }}" >> .env.prod
+            echo "BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> .env.prod
+
+            chmod 600 .env.prod
+
+            echo "Pulling latest backend image..."
+            docker compose --env-file .env.prod pull pms-subdomain-backend
+
+            echo "Deploying new backend container (zero downtime)..."
+            docker compose --env-file .env.prod up -d --no-deps --force-recreate pms-subdomain-backend
+
+            echo "Waiting for app startup..."
+            sleep 12
+
+            echo "Cleaning leftover Docker images..."
+            docker image prune -af
+
+            echo "✔ Backend deployed successfully!"
+            docker compose logs --tail 50 pms-subdomain-backend

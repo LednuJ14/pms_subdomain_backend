@@ -37,6 +37,10 @@ class Config:
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 16777216))  # 16MB
     ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx'}
     
+    # Firebase Configuration
+    FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON', '')
+    FIREBASE_DATABASE_URL = os.environ.get('FIREBASE_DATABASE_URL', '')
+
     # Reminder System Configuration
     ENABLE_AUTO_REMINDERS = os.environ.get('ENABLE_AUTO_REMINDERS', 'false').lower() in ['true', 'on', '1']
     REMINDER_API_KEY = os.environ.get('REMINDER_API_KEY', None)  # Optional API key for reminder endpoint

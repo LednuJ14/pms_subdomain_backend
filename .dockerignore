@@ -1,0 +1,17 @@
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+Dockerfile
+.dockerignore
+*.md
+.mypy_cache
+.pytest_cache
+instance/uploads/*

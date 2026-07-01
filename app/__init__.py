@@ -70,38 +70,40 @@ def create_app(config_name=None):
         "http://127.0.0.1:8080",
         "http://127.0.0.1:8081",
     ]
-    
+
     # Regex pattern for localhost subdomains (for manual validation)
     localhost_regex = re.compile(r'https?://([a-zA-Z0-9-]+\.)?localhost(:\d+)?')
-    
+
     # Regex pattern for dev tunnel URLs (e.g., *.devtunnels.ms, *.asse.devtunnels.ms)
-    # This allows any subdomain of devtunnels.ms domains
     devtunnel_regex = re.compile(r'https?://[a-zA-Z0-9-]+\.(devtunnels\.ms|asse\.devtunnels\.ms)(/.*)?')
-    
+
+    # Regex pattern for production vicirotechnologies.com subdomains
+    viciro_regex = re.compile(r'https?://([a-zA-Z0-9-]+\.)*vicirotechnologies\.com')
+
     # Validator function for manual checks (used in error handlers)
     def cors_origin_validator(origin):
-        """Validate if origin is allowed (localhost with any subdomain or dev tunnel URLs)."""
+        """Validate if origin is allowed (localhost with any subdomain, dev tunnels, or production)."""
         if not origin:
             return False
-        # Check if it matches localhost pattern (any subdomain)
         if localhost_regex.match(origin):
             return True
-        # Check if it matches dev tunnel pattern (for development)
         if devtunnel_regex.match(origin):
             return True
-        # Check specific origins
+        if viciro_regex.match(origin):
+            return True
         return origin in allowed_origins_list
-    
+
     # Use a list of origins - Flask-CORS will handle regex patterns in the list
-    # We'll use a wildcard approach for localhost subdomains by including common patterns
     cors_origins = allowed_origins_list.copy()
-    
-    # Add regex pattern for localhost subdomains (Flask-CORS supports regex in list)
-    # Pattern: any subdomain of localhost with any port
+
+    # Add regex pattern for localhost subdomains
     cors_origins.append(r'https?://([a-zA-Z0-9-]+\.)?localhost(:\d+)?')
-    
+
     # Add regex pattern for dev tunnels
     cors_origins.append(r'https?://[a-zA-Z0-9-]+\.(devtunnels\.ms|asse\.devtunnels\.ms)(/.*)?')
+
+    # Add regex pattern for production *.vicirotechnologies.com
+    cors_origins.append(r'https?://([a-zA-Z0-9-]+\.)*vicirotechnologies\.com')
     
     CORS(app, 
          origins=cors_origins,  # Use list with regex patterns
