@@ -217,9 +217,8 @@ class User(db.Model):
             else:
                 role_str = str(self.role).upper() if self.role else 'TENANT'
                 # Map database values to model values
-                # ADMIN is not supported in subdomain - map to property_manager for backward compatibility
                 role_map = {
-                    'ADMIN': 'property_manager',  # Map ADMIN to property_manager in subdomain
+                    'ADMIN': 'ADMIN',  # Preserve ADMIN role so frontend can detect it
                     'MANAGER': 'property_manager',
                     'STAFF': 'staff',
                     'TENANT': 'tenant'
