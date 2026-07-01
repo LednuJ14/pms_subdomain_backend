@@ -109,7 +109,7 @@ def staff_belongs_to_property(user_id, property_id):
             
             result = staff is not None
             if result:
-                current_app.logger.info(f"Staff {user_id_int} verified for property {property_id_int}")
+                current_app.logger.debug(f"Staff {user_id_int} verified for property {property_id_int}")
             else:
                 current_app.logger.warning(f"Staff {user_id_int} NOT found for property {property_id_int}")
             return result
@@ -167,7 +167,7 @@ def get_chats():
     """
     try:
         # Log the request for debugging
-        current_app.logger.info(f"get_chats called - Origin: {request.headers.get('Origin')}, Method: {request.method}")
+        current_app.logger.debug(f"get_chats called - Origin: {request.headers.get('Origin')}, Method: {request.method}")
         
         current_user = get_current_user()
         if not current_user:
@@ -176,7 +176,7 @@ def get_chats():
             response.status_code = 404
             return response
         
-        current_app.logger.info(f"get_chats: User {current_user.id} (role: {current_user.role})")
+        current_app.logger.debug(f"get_chats: User {current_user.id} (role: {current_user.role})")
         
         # Determine user role
         try:
@@ -187,7 +187,7 @@ def get_chats():
                 user_role_str = user_role.upper()
             else:
                 user_role_str = str(user_role).upper() if user_role else 'TENANT'
-            current_app.logger.info(f"get_chats: User role determined as: {user_role_str}")
+            current_app.logger.debug(f"get_chats: User role determined as: {user_role_str}")
         except Exception as role_err:
             current_app.logger.error(f"Error determining user role: {str(role_err)}", exc_info=True)
             response = jsonify({'error': 'Error determining user role'})
@@ -198,7 +198,7 @@ def get_chats():
         try:
             status = request.args.get('status', 'active')
             property_id = get_property_id_from_request()
-            current_app.logger.info(f"get_chats: property_id={property_id}, status={status}")
+            current_app.logger.debug(f"get_chats: property_id={property_id}, status={status}")
         except Exception as param_err:
             current_app.logger.error(f"Error getting parameters: {str(param_err)}", exc_info=True)
             response = jsonify({'error': 'Error getting request parameters'})
@@ -282,7 +282,7 @@ def get_chats():
                                     # Update the chat subject
                                     chat.subject = manager_name
                                     db.session.commit()
-                                    current_app.logger.info(f"Updated chat {chat.id} subject to {manager_name}")
+                                    current_app.logger.debug(f"Updated chat {chat.id} subject to {manager_name}")
                         except Exception as update_error:
                             current_app.logger.warning(f"Error updating chat {chat.id} subject: {str(update_error)}")
                             db.session.rollback()
@@ -372,7 +372,7 @@ def get_chats():
                         db.session.add(new_chat)
                         db.session.commit()
                         chats.append(new_chat)
-                        current_app.logger.info(f"Created chat entry for staff {staff.id} ({staff_name})")
+                        current_app.logger.debug(f"Created chat entry for staff {staff.id} ({staff_name})")
                     except Exception as create_err:
                         current_app.logger.warning(f"Error creating chat for staff {staff.id}: {str(create_err)}")
                         db.session.rollback()
@@ -472,7 +472,7 @@ def get_chats():
         elif user_role_str == 'STAFF':
             # Staff can only chat with property manager, not tenants
             # Create a single chat entry representing communication with the property manager
-            current_app.logger.info(f"get_chats: Processing STAFF request - Staff to Property Manager only (user_id={current_user.id}, property_id={property_id})")
+            current_app.logger.debug(f"get_chats: Processing STAFF request - Staff to Property Manager only (user_id={current_user.id}, property_id={property_id})")
             
             # Initialize chats_list early to avoid undefined variable errors
             chats_list = []
@@ -484,7 +484,7 @@ def get_chats():
                     try:
                         claims = get_jwt()
                         property_id = claims.get('property_id')
-                        current_app.logger.info(f"get_chats: Got property_id from JWT: {property_id}")
+                        current_app.logger.debug(f"get_chats: Got property_id from JWT: {property_id}")
                     except Exception as jwt_err:
                         current_app.logger.warning(f"Error getting property_id from JWT: {str(jwt_err)}")
                         pass
@@ -506,7 +506,7 @@ def get_chats():
                         response = jsonify({'error': 'Property not found'})
                         response.status_code = 404
                         return response
-                    current_app.logger.info(f"Property {property_id} found: {getattr(property_obj, 'name', 'N/A')}")
+                    current_app.logger.debug(f"Property {property_id} found: {getattr(property_obj, 'name', 'N/A')}")
                 except Exception as prop_err:
                     current_app.logger.error(f"Error querying property {property_id}: {str(prop_err)}", exc_info=True)
                     response = jsonify({'error': 'Error verifying property access'})
@@ -519,7 +519,7 @@ def get_chats():
                     if property_obj.owner_id:
                         manager = User.query.get(property_obj.owner_id)
                         if manager:
-                            current_app.logger.info(f"Property manager found: {manager.id} ({getattr(manager, 'email', 'N/A')})")
+                            current_app.logger.debug(f"Property manager found: {manager.id} ({getattr(manager, 'email', 'N/A')})")
                         else:
                             current_app.logger.warning(f"Property manager with ID {property_obj.owner_id} not found")
                     else:
@@ -575,7 +575,7 @@ def get_chats():
                     try:
                         staff_members = Staff.query.filter_by(property_id=property_id).all()
                         staff_user_ids = [staff.user_id for staff in staff_members if staff.user_id]
-                        current_app.logger.info(f"Found {len(staff_user_ids)} staff members for property {property_id}")
+                        current_app.logger.debug(f"Found {len(staff_user_ids)} staff members for property {property_id}")
                     except Exception as staff_query_err:
                         current_app.logger.warning(f"Error querying staff: {str(staff_query_err)}")
                     
@@ -606,7 +606,7 @@ def get_chats():
                         
                         if chats_with_staff_messages:
                             recent_manager_chat = chats_with_staff_messages
-                            current_app.logger.info(f"Found staff-manager chat {recent_manager_chat.id} for property {property_id} (no tenant messages)")
+                            current_app.logger.debug(f"Found staff-manager chat {recent_manager_chat.id} for property {property_id} (no tenant messages)")
                         else:
                             # If no chat found without tenant messages, try finding chats with only staff/manager messages
                             # by checking if the chat has any tenant messages
@@ -629,7 +629,7 @@ def get_chats():
                                 
                                 if tenant_message_count == 0:
                                     recent_manager_chat = candidate_chat
-                                    current_app.logger.info(f"Found staff-manager chat {recent_manager_chat.id} (verified no tenant messages)")
+                                    current_app.logger.debug(f"Found staff-manager chat {recent_manager_chat.id} (verified no tenant messages)")
                                     break
                             
                     except Exception as chat_query_err:
@@ -638,7 +638,7 @@ def get_chats():
                     # If still no staff-manager chat found, don't use fallback - return virtual chat instead
                     # This prevents showing tenant-manager conversations to staff
                     if not recent_manager_chat:
-                        current_app.logger.info(f"No staff-manager chat found (only tenant-manager chats exist), returning virtual chat")
+                        current_app.logger.debug(f"No staff-manager chat found (only tenant-manager chats exist), returning virtual chat")
                     
                     # If no chat exists, we'll create a virtual one (staff can't send until manager creates a chat)
                     if not recent_manager_chat:
@@ -694,7 +694,7 @@ def get_chats():
                                 )
                             ).order_by(Message.created_at.asc()).all()
                             
-                            current_app.logger.info(f"Found {len(manager_messages)} staff-manager messages in chat {recent_manager_chat.id}")
+                            current_app.logger.debug(f"Found {len(manager_messages)} staff-manager messages in chat {recent_manager_chat.id}")
                         except Exception as msg_query_err:
                             current_app.logger.warning(f"Error querying messages for chat {recent_manager_chat.id}: {str(msg_query_err)}", exc_info=True)
                             manager_messages = []
@@ -760,7 +760,7 @@ def get_chats():
                     'total': len(chats_list)
                 })
                 response.status_code = 200
-                current_app.logger.info(f"get_chats STAFF: Returning {len(chats_list)} chat(s) for property {property_id}")
+                current_app.logger.debug(f"get_chats STAFF: Returning {len(chats_list)} chat(s) for property {property_id}")
                 return response
                 
             except Exception as staff_section_err:
@@ -939,7 +939,7 @@ def create_chat():
                 property_id=property_id,
                 subject=subject
             )
-            current_app.logger.info(f"Chat object created: tenant_id={tenant.id}, property_id={property_id}, subject={new_chat.subject}")
+            current_app.logger.debug(f"Chat object created: tenant_id={tenant.id}, property_id={property_id}, subject={new_chat.subject}")
         except Exception as init_error:
             current_app.logger.error(f"Error creating Chat object: {str(init_error)}", exc_info=True)
             db.session.rollback()
@@ -951,9 +951,9 @@ def create_chat():
         
         try:
             db.session.add(new_chat)
-            current_app.logger.info(f"Chat added to session: {new_chat.id if hasattr(new_chat, 'id') else 'pending'}")
+            current_app.logger.debug(f"Chat added to session: {new_chat.id if hasattr(new_chat, 'id') else 'pending'}")
             db.session.commit()
-            current_app.logger.info(f"Chat committed to database: {new_chat.id} by tenant {tenant.id}")
+            current_app.logger.debug(f"Chat committed to database: {new_chat.id} by tenant {tenant.id}")
         except Exception as db_error:
             current_app.logger.error(f"Database error creating chat: {str(db_error)}", exc_info=True)
             db.session.rollback()
@@ -1118,7 +1118,7 @@ def get_chat(chat_id):
                         # Update the chat subject
                         chat.subject = manager_name
                         db.session.commit()
-                        current_app.logger.info(f"Updated chat {chat.id} subject to {manager_name}")
+                        current_app.logger.debug(f"Updated chat {chat.id} subject to {manager_name}")
             except Exception as update_error:
                 current_app.logger.warning(f"Error updating chat {chat.id} subject: {str(update_error)}")
                 db.session.rollback()
@@ -1209,7 +1209,7 @@ def get_chat(chat_id):
                         
                         chat.subject = tenant_name
                         db.session.commit()
-                        current_app.logger.info(f"Updated chat {chat.id} subject to tenant name: {tenant_name}")
+                        current_app.logger.debug(f"Updated chat {chat.id} subject to tenant name: {tenant_name}")
                 except Exception as update_error:
                     current_app.logger.warning(f"Error updating chat {chat.id} subject: {str(update_error)}")
                     db.session.rollback()
@@ -1253,7 +1253,7 @@ def get_chat(chat_id):
                         Message.sender_id.in_(allowed_sender_ids)
                     )
                 ).order_by(Message.created_at.asc()).all()
-                current_app.logger.info(f"Staff viewing chat {chat_id}: showing {len(messages)} staff-manager messages (from {len(allowed_sender_ids)} allowed senders)")
+                current_app.logger.debug(f"Staff viewing chat {chat_id}: showing {len(messages)} staff-manager messages (from {len(allowed_sender_ids)} allowed senders)")
             else:
                 # Fallback: just filter by sender_type if we can't get sender IDs
                 messages = Message.query.filter(
@@ -1362,7 +1362,7 @@ def get_chat(chat_id):
         # This ensures messages are always present even if the relationship wasn't loaded
         try:
             chat_dict['messages'] = [msg.to_dict(include_sender=True) for msg in messages]
-            current_app.logger.info(f"Chat {chat_id} has {len(messages)} messages for {user_role_str}")
+            current_app.logger.debug(f"Chat {chat_id} has {len(messages)} messages for {user_role_str}")
         except Exception as msg_error:
             current_app.logger.warning(f"Error serializing messages for chat {chat_id}: {str(msg_error)}")
             # Fallback to relationship if available
@@ -1627,7 +1627,7 @@ def send_message(chat_id):
         
         db.session.commit()
         
-        current_app.logger.info(f"Message sent: {new_message.id} in chat {chat_id}")
+        current_app.logger.debug(f"Message sent: {new_message.id} in chat {chat_id}")
         
         return jsonify({
             'message': 'Message sent successfully',

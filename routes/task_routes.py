@@ -225,7 +225,7 @@ def get_tasks():
                     query = query.filter(or_(*conditions) if len(conditions) > 1 else conditions[0])
                 else:
                     query = query.filter(Task.id == -1)  # No units/tenants, return empty
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             # Property managers can see all tasks for their property
             if not property_id:
                 return property_context_required()
@@ -432,7 +432,7 @@ def get_task(task_id):
             # Staff can view tasks assigned to them
             if task.assigned_to != current_user.id:
                 return jsonify({'error': 'Access denied. You can only view tasks assigned to you.'}), 403
-        elif user_role_str in ['PROPERTY_MANAGER', 'MANAGER']:
+        elif user_role_str in ['PROPERTY_MANAGER', 'MANAGER', 'ADMIN']:
             # CRITICAL: Verify property ownership for property managers
             from routes.auth_routes import get_property_id_from_request
             property_id = get_property_id_from_request()
@@ -560,13 +560,13 @@ def create_task():
         else:
             user_role = str(current_user.role).upper()
         
-        # Only property managers and staff can create tasks
+        # Only property managers, admins and staff can create tasks
         # Handle both MANAGER and PROPERTY_MANAGER roles
-        if user_role not in ['PROPERTY_MANAGER', 'MANAGER', 'STAFF']:
+        if user_role not in ['PROPERTY_MANAGER', 'MANAGER', 'STAFF', 'ADMIN']:
             return jsonify({'error': 'Access denied'}), 403
         
         # CRITICAL: For property managers, verify property ownership
-        if user_role in ['PROPERTY_MANAGER', 'MANAGER']:
+        if user_role in ['PROPERTY_MANAGER', 'MANAGER', 'ADMIN']:
             from routes.auth_routes import get_property_id_from_request
             property_id = get_property_id_from_request()
             if not property_id:
@@ -647,7 +647,7 @@ def create_task():
             except Exception as notif_error:
                 current_app.logger.warning(f"Failed to create notification for task {task.id}: {str(notif_error)}")
         
-        current_app.logger.info(f"Task created: {task.id} by user {current_user.id}")
+        current_app.logger.debug(f"Task created: {task.id} by user {current_user.id}")
         
         return jsonify({
             'message': 'Task created successfully',
@@ -738,7 +738,7 @@ def update_task(task_id):
         if user_role_str == 'TENANT':
             if task.assigned_to != current_user.id:
                 return jsonify({'error': 'Access denied'}), 403
-        elif user_role_str in ['PROPERTY_MANAGER', 'MANAGER']:
+        elif user_role_str in ['PROPERTY_MANAGER', 'MANAGER', 'ADMIN']:
             # CRITICAL: Verify property ownership for property managers
             from routes.auth_routes import get_property_id_from_request
             property_id = get_property_id_from_request()
@@ -892,7 +892,7 @@ def update_task(task_id):
             except Exception as notif_error:
                 current_app.logger.warning(f"Failed to create notification for task {task.id}: {str(notif_error)}")
         
-        current_app.logger.info(f"Task updated: {task_id} by user {current_user.id}")
+        current_app.logger.debug(f"Task updated: {task_id} by user {current_user.id}")
         
         return jsonify({
             'message': 'Task updated successfully',
@@ -1007,7 +1007,7 @@ def delete_task(task_id):
         db.session.delete(task)
         db.session.commit()
         
-        current_app.logger.info(f"Task deleted: {task_id} by user {current_user.id}")
+        current_app.logger.debug(f"Task deleted: {task_id} by user {current_user.id}")
         
         return jsonify({'message': 'Task deleted successfully'}), 200
         

@@ -108,7 +108,7 @@ def get_notifications():
             if not tenant:
                 return jsonify({'error': 'Tenant profile not found'}), 404
             query = Notification.query.filter_by(tenant_id=tenant.id, user_id=current_user.id, recipient_type='tenant')
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             query = Notification.query.filter_by(user_id=current_user.id)
         elif user_role_str == 'STAFF':
             # Staff see notifications for their user_id with recipient_type='staff'
@@ -232,7 +232,7 @@ def get_unread_count():
                 except Exception as tenant_count_err:
                     current_app.logger.warning(f"Error counting tenant notifications: {str(tenant_count_err)}")
                     count = 0
-            elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+            elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
                 try:
                     count = Notification.query.filter_by(
                         user_id=current_user.id,
@@ -527,7 +527,7 @@ def mark_all_as_read():
                 recipient_type='tenant',
                 is_read=False
             )
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             query = Notification.query.filter_by(
                 user_id=current_user.id,
                 is_read=False
@@ -668,7 +668,7 @@ def delete_all_read():
                 user_id=current_user.id,
                 is_read=True
             )
-        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER']:
+        elif user_role_str in ['MANAGER', 'PROPERTY_MANAGER', 'ADMIN']:
             query = Notification.query.filter_by(
                 user_id=current_user.id,
                 is_read=True

@@ -357,7 +357,7 @@ def create_staff():
                 status='active'
             )
             db.session.add(staff_chat)
-            current_app.logger.info(f"Created chat entry for new staff {staff.id} ({staff_name})")
+            current_app.logger.debug(f"Created chat entry for new staff {staff.id} ({staff_name})")
         except Exception as chat_err:
             # Log but don't fail staff creation if chat creation fails
             current_app.logger.warning(f"Error creating chat for staff {staff.id}: {str(chat_err)}")

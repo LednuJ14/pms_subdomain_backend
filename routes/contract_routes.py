@@ -184,7 +184,7 @@ def get_contracts():
             if not tenant:
                 return jsonify({'error': 'Tenant profile not found'}), 404
             query = query.filter_by(tenant_id=tenant.id)
-        elif user_role in ['PROPERTY_MANAGER', 'MANAGER']:
+        elif user_role in ['PROPERTY_MANAGER', 'MANAGER', 'ADMIN']:
             # Property managers can see all contracts
             # Optionally filter by property_id if provided
             property_id = request.args.get('property_id', type=int)

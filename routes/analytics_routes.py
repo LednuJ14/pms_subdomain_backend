@@ -198,7 +198,8 @@ def get_dashboard_data():
         
         # CRITICAL: Do NOT auto-detect from owned properties
         # Property managers must access through the correct subdomain
-        if user_role == 'property_manager':
+        user_role_upper = str(user_role).upper() if user_role else ''
+        if user_role == 'property_manager' or user_role_upper == 'ADMIN':
             if not property_id:
                 # Return safe empty dashboard instead of error
                 return jsonify({
@@ -298,7 +299,7 @@ def get_dashboard_data():
 def get_manager_dashboard(property_id):
     """Get property manager dashboard data for a specific property."""
     try:
-        current_app.logger.info(f"Getting manager dashboard for property_id: {property_id}")
+        current_app.logger.debug(f"Getting manager dashboard for property_id: {property_id}")
         # Verify property exists
         property_obj = Property.query.get(property_id)
         if not property_obj:
@@ -369,7 +370,7 @@ def get_manager_dashboard(property_id):
                         )
                     ).count()
                     
-                    current_app.logger.info(f"Property {property_id}: {active_tenants} active tenants in {occupied_units} occupied units")
+                    current_app.logger.debug(f"Property {property_id}: {active_tenants} active tenants in {occupied_units} occupied units")
                     
                 except Exception as join_error:
                     current_app.logger.warning(f"Error joining TenantUnit: {str(join_error)}")
@@ -382,7 +383,7 @@ def get_manager_dashboard(property_id):
                         active_tenants = db.session.query(Tenant).join(TenantUnit).join(Unit).filter(
                             Unit.property_id == property_id
                         ).count()
-                        current_app.logger.info(f"Using fallback: {active_tenants} tenants, {occupied_units} occupied units (by status)")
+                        current_app.logger.debug(f"Using fallback: {active_tenants} tenants, {occupied_units} occupied units (by status)")
                     except Exception:
                         occupied_units = 0
                         active_tenants = 0
@@ -416,7 +417,7 @@ def get_manager_dashboard(property_id):
         try:
             if table_exists('staff'):
                 active_staff = Staff.query.filter_by(property_id=property_id).count()
-                current_app.logger.info(f"Property {property_id}: Found {active_staff} staff members")
+                current_app.logger.debug(f"Property {property_id}: Found {active_staff} staff members")
             else:
                 current_app.logger.warning("Staff table does not exist")
                 active_staff = 0
@@ -428,7 +429,7 @@ def get_manager_dashboard(property_id):
         occupancy_rate = round((occupied_units / total_units * 100), 2) if total_units > 0 else 0
         
         # Log unit metrics for debugging
-        current_app.logger.info(f"Property {property_id} unit metrics: total={total_units}, occupied={occupied_units}, available={available_units}, rate={occupancy_rate}%")
+        current_app.logger.debug(f"Property {property_id} unit metrics: total={total_units}, occupied={occupied_units}, available={available_units}, rate={occupancy_rate}%")
         
         # Financial metrics - current month
         current_month = datetime.now().month
@@ -774,7 +775,7 @@ def get_manager_dashboard(property_id):
             property_name = f'Property {property_id}'
         
         # Log final metrics for debugging
-        current_app.logger.info(f"Dashboard data for property {property_id} ({property_name}): "
+        current_app.logger.debug(f"Dashboard data for property {property_id} ({property_name}): "
                               f"revenue={float(monthly_income)}, tenants={active_tenants}, "
                               f"units={total_units}/{occupied_units}/{available_units}, "
                               f"occupancy={occupancy_rate}%")
@@ -913,7 +914,7 @@ def get_staff_dashboard(user_id, property_id=None):
         
         # If no staff profile, return basic dashboard
         if not staff:
-            current_app.logger.info(f"No staff profile found for user {user_id_int}, returning basic dashboard")
+            current_app.logger.debug(f"No staff profile found for user {user_id_int}, returning basic dashboard")
             try:
                 user_name = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or getattr(user, 'email', 'Staff Member')
                 user_email = getattr(user, 'email', '')
@@ -1215,7 +1216,7 @@ def get_financial_summary():
     try:
         # Get property_id from request (subdomain, query param, header, or JWT)
         property_id = get_property_id_from_request()
-        current_app.logger.info(f"Financial summary request - property_id: {property_id}")
+        current_app.logger.debug(f"Financial summary request - property_id: {property_id}")
         
         if not property_id:
             current_app.logger.warning("Financial summary: No property_id found in request")
@@ -1348,7 +1349,7 @@ def get_financial_summary():
             property_name = f'Property {property_id}'
         
         # Log financial summary for debugging
-        current_app.logger.info(f"Financial summary for property {property_id} ({property_name}): "
+        current_app.logger.debug(f"Financial summary for property {property_id} ({property_name}): "
                               f"total_revenue={float(total_revenue)}, outstanding={float(total_outstanding)}, "
                               f"overdue_bills={overdue_bills}, months={len(monthly_data)}")
         
@@ -1423,7 +1424,7 @@ def get_occupancy_report():
     try:
         # Get property_id from request (subdomain, query param, header, or JWT)
         property_id = get_property_id_from_request()
-        current_app.logger.info(f"Occupancy report request - property_id: {property_id}")
+        current_app.logger.debug(f"Occupancy report request - property_id: {property_id}")
         
         if not property_id:
             current_app.logger.warning("Occupancy report: No property_id found in request")
@@ -1490,7 +1491,7 @@ def get_occupancy_report():
                         ).distinct().all()
                         
                         occupied_units = len(occupied_unit_ids)
-                        current_app.logger.info(f"Occupancy report: {occupied_units} occupied units (from TenantUnit) for property {property_id}")
+                        current_app.logger.debug(f"Occupancy report: {occupied_units} occupied units (from TenantUnit) for property {property_id}")
                     except Exception as join_error:
                         current_app.logger.warning(f"Error joining TenantUnit in occupancy report: {str(join_error)}")
                         # Fallback to unit status
@@ -1546,7 +1547,7 @@ def get_occupancy_report():
             property_name = f'Property {property_id}'
         
         # Log occupancy report for debugging
-        current_app.logger.info(f"Occupancy report for property {property_id} ({property_name}): "
+        current_app.logger.debug(f"Occupancy report for property {property_id} ({property_name}): "
                               f"total={total_units}, occupied={occupied_units}, "
                               f"available={available_units}, rate={occupancy_rate}%, "
                               f"breakdown_items={len(unit_type_data)}")
@@ -1584,7 +1585,7 @@ def _get_analytics_data_for_report(property_id):
     Matches frontend data extraction logic exactly.
     """
     try:
-        current_app.logger.info(f'Getting analytics data for report, property_id: {property_id}')
+        current_app.logger.debug(f'Getting analytics data for report, property_id: {property_id}')
         
         # Get property name
         property_name = f'Property {property_id}'
@@ -1617,15 +1618,15 @@ def _get_analytics_data_for_report(property_id):
             dashboard_json = {}
         
         # Log the FULL dashboard response to debug
-        current_app.logger.info(f'Dashboard JSON keys: {list(dashboard_json.keys()) if dashboard_json else "EMPTY"}')
+        current_app.logger.debug(f'Dashboard JSON keys: {list(dashboard_json.keys()) if dashboard_json else "EMPTY"}')
         if dashboard_json:
-            current_app.logger.info(f'Dashboard has error: {dashboard_json.get("error")}')
+            current_app.logger.debug(f'Dashboard has error: {dashboard_json.get("error")}')
             if dashboard_json.get('metrics'):
-                current_app.logger.info(f'Dashboard metrics keys: {list(dashboard_json.get("metrics", {}).keys())}')
-                current_app.logger.info(f'Dashboard metrics sample: total_income={dashboard_json.get("metrics", {}).get("total_income")}, avg_monthly_rent={dashboard_json.get("metrics", {}).get("avg_monthly_rent")}')
+                current_app.logger.debug(f'Dashboard metrics keys: {list(dashboard_json.get("metrics", {}).keys())}')
+                current_app.logger.debug(f'Dashboard metrics sample: total_income={dashboard_json.get("metrics", {}).get("total_income")}, avg_monthly_rent={dashboard_json.get("metrics", {}).get("avg_monthly_rent")}')
             if dashboard_json.get('properties'):
-                current_app.logger.info(f'Dashboard properties keys: {list(dashboard_json.get("properties", {}).keys())}')
-                current_app.logger.info(f'Dashboard properties sample: total_units={dashboard_json.get("properties", {}).get("total_units")}, occupied_units={dashboard_json.get("properties", {}).get("occupied_units")}')
+                current_app.logger.debug(f'Dashboard properties keys: {list(dashboard_json.get("properties", {}).keys())}')
+                current_app.logger.debug(f'Dashboard properties sample: total_units={dashboard_json.get("properties", {}).get("total_units")}, occupied_units={dashboard_json.get("properties", {}).get("occupied_units")}')
         
         # If dashboard has error, log it but continue
         if dashboard_json.get('error'):
@@ -1639,11 +1640,11 @@ def _get_analytics_data_for_report(property_id):
             properties = dashboard_json.get('properties') or {}
         
         # Log what we extracted
-        current_app.logger.info(f'Extracted metrics keys: {list(metrics.keys())}, properties keys: {list(properties.keys())}')
+        current_app.logger.debug(f'Extracted metrics keys: {list(metrics.keys())}, properties keys: {list(properties.keys())}')
         if metrics:
-            current_app.logger.info(f'Metrics values: total_income={metrics.get("total_income")}, active_tenants={metrics.get("active_tenants")}, avg_monthly_rent={metrics.get("avg_monthly_rent")}, occupancy_rate={metrics.get("occupancy_rate")}, outstanding_balance={metrics.get("outstanding_balance")}')
+            current_app.logger.debug(f'Metrics values: total_income={metrics.get("total_income")}, active_tenants={metrics.get("active_tenants")}, avg_monthly_rent={metrics.get("avg_monthly_rent")}, occupancy_rate={metrics.get("occupancy_rate")}, outstanding_balance={metrics.get("outstanding_balance")}')
         if properties:
-            current_app.logger.info(f'Properties values: total_units={properties.get("total_units")}, occupied_units={properties.get("occupied_units")}, available_units={properties.get("available_units")}, occupancy_rate={properties.get("occupancy_rate")}')
+            current_app.logger.debug(f'Properties values: total_units={properties.get("total_units")}, occupied_units={properties.get("occupied_units")}, available_units={properties.get("available_units")}, occupancy_rate={properties.get("occupancy_rate")}')
         
         # Get financial data directly from database (same logic as get_financial_summary)
         financial_totals = {}
@@ -1689,7 +1690,7 @@ def _get_analytics_data_for_report(property_id):
                 'outstanding_balance': float(total_outstanding),
                 'overdue_bills_count': overdue_bills
             }
-            current_app.logger.info(f'Financial totals: {financial_totals}')
+            current_app.logger.debug(f'Financial totals: {financial_totals}')
         except Exception as e:
             current_app.logger.warning(f'Error getting financial data: {str(e)}', exc_info=True)
         
@@ -1733,7 +1734,7 @@ def _get_analytics_data_for_report(property_id):
                     'available_units': available_units,
                     'occupancy_rate': occupancy_rate
                 }
-                current_app.logger.info(f'Occupancy data: {overall_occupancy}')
+                current_app.logger.debug(f'Occupancy data: {overall_occupancy}')
             else:
                 overall_occupancy = {
                     'total_units': 0,
@@ -1755,7 +1756,7 @@ def _get_analytics_data_for_report(property_id):
             property_name = dashboard_json.get('property_name')
         
         # Log extracted data from all sources
-        current_app.logger.info(f'All data sources - metrics keys: {list(metrics.keys())}, properties keys: {list(properties.keys())}, financial_totals keys: {list(financial_totals.keys())}, overall_occupancy keys: {list(overall_occupancy.keys())}')
+        current_app.logger.debug(f'All data sources - metrics keys: {list(metrics.keys())}, properties keys: {list(properties.keys())}, financial_totals keys: {list(financial_totals.keys())}, overall_occupancy keys: {list(overall_occupancy.keys())}')
         
         # Build report data with proper defaults - prioritize dashboard data
         # Dashboard has the most comprehensive data, use it as primary source
@@ -1790,9 +1791,9 @@ def _get_analytics_data_for_report(property_id):
         
         # Log which source we're using for total revenue
         if total_revenue_from_dashboard is not None:
-            current_app.logger.info(f'Using total_income from dashboard (current month): {total_revenue_from_dashboard}')
+            current_app.logger.debug(f'Using total_income from dashboard (current month): {total_revenue_from_dashboard}')
         elif total_revenue_from_financial is not None:
-            current_app.logger.info(f'Using total_revenue from financial summary (all time): {total_revenue_from_financial}')
+            current_app.logger.debug(f'Using total_revenue from financial summary (all time): {total_revenue_from_financial}')
         else:
             current_app.logger.warning('No total revenue data found, using 0')
         # MATCH FRONTEND LOGIC EXACTLY - same priority order
@@ -1905,13 +1906,13 @@ def _get_analytics_data_for_report(property_id):
                 current_app.logger.warning(f'Error calculating avg monthly rent: {str(e)}')
                 avg_monthly_rent_val = 0
         
-        current_app.logger.info(f'Open requests: {open_requests_val}, Avg monthly rent: {avg_monthly_rent_val}')
+        current_app.logger.debug(f'Open requests: {open_requests_val}, Avg monthly rent: {avg_monthly_rent_val}')
         
         # Log raw values before processing
-        current_app.logger.info(f'Raw dashboard values: total_income={metrics.get("total_income")}, active_tenants={metrics.get("active_tenants")}, total_units={properties.get("total_units")}, occupied_units={properties.get("occupied_units")}')
-        current_app.logger.info(f'Financial totals: total_revenue={financial_totals.get("total_revenue")}, overdue_bills={financial_totals.get("overdue_bills_count")}')
-        current_app.logger.info(f'Overall occupancy: total_units={overall_occupancy.get("total_units")}, occupied_units={overall_occupancy.get("occupied_units")}, occupancy_rate={overall_occupancy.get("occupancy_rate")}')
-        current_app.logger.info(f'Processed values: total_revenue={total_revenue_val}, active_tenants={active_tenants_val}, total_units={total_units_val}, occupied_units={occupied_units_val}')
+        current_app.logger.debug(f'Raw dashboard values: total_income={metrics.get("total_income")}, active_tenants={metrics.get("active_tenants")}, total_units={properties.get("total_units")}, occupied_units={properties.get("occupied_units")}')
+        current_app.logger.debug(f'Financial totals: total_revenue={financial_totals.get("total_revenue")}, overdue_bills={financial_totals.get("overdue_bills_count")}')
+        current_app.logger.debug(f'Overall occupancy: total_units={overall_occupancy.get("total_units")}, occupied_units={overall_occupancy.get("occupied_units")}, occupancy_rate={overall_occupancy.get("occupancy_rate")}')
+        current_app.logger.debug(f'Processed values: total_revenue={total_revenue_val}, active_tenants={active_tenants_val}, total_units={total_units_val}, occupied_units={occupied_units_val}')
         
         # Convert to proper types - preserve 0 values, only default None
         def to_float(val, default=0.0):
@@ -1949,9 +1950,9 @@ def _get_analytics_data_for_report(property_id):
         }
         
         # Log final report data summary with ALL values
-        current_app.logger.info(f'FINAL Report data: property_name={report_data["property_name"]}, revenue={report_data["total_revenue"]}, outstanding={report_data["outstanding_balance"]}, overdue_bills={report_data["overdue_bills"]}')
-        current_app.logger.info(f'FINAL Report data: units={report_data["total_units"]}, occupied={report_data["occupied_units"]}, available={report_data["available_units"]}, occupancy={report_data["occupancy_rate"]}%')
-        current_app.logger.info(f'FINAL Report data: open_requests={report_data["open_requests"]}, pending_tasks={report_data["pending_tasks"]}, avg_rent={report_data["avg_monthly_rent"]}')
+        current_app.logger.debug(f'FINAL Report data: property_name={report_data["property_name"]}, revenue={report_data["total_revenue"]}, outstanding={report_data["outstanding_balance"]}, overdue_bills={report_data["overdue_bills"]}')
+        current_app.logger.debug(f'FINAL Report data: units={report_data["total_units"]}, occupied={report_data["occupied_units"]}, available={report_data["available_units"]}, occupancy={report_data["occupancy_rate"]}%')
+        current_app.logger.debug(f'FINAL Report data: open_requests={report_data["open_requests"]}, pending_tasks={report_data["pending_tasks"]}, avg_rent={report_data["avg_monthly_rent"]}')
         
         return report_data
     except Exception as e:
@@ -2024,13 +2025,13 @@ def download_pdf_report():
             current_app.logger.error('PDF download: Property ID not found in request')
             return jsonify({'error': 'Property ID is required'}), 400
         
-        current_app.logger.info(f'PDF download: Starting report generation for property_id={property_id}')
+        current_app.logger.debug(f'PDF download: Starting report generation for property_id={property_id}')
         
         data = _get_analytics_data_for_report(property_id)
         
         # Log ALL data for debugging
-        current_app.logger.info(f'PDF Report Data - Full: {data}')
-        current_app.logger.info(f'PDF Report Data - Summary: property_id={property_id}, property_name={data.get("property_name")}, total_revenue={data.get("total_revenue")}, total_units={data.get("total_units")}, active_tenants={data.get("active_tenants")}, occupancy_rate={data.get("occupancy_rate")}')
+        current_app.logger.debug(f'PDF Report Data - Full: {data}')
+        current_app.logger.debug(f'PDF Report Data - Summary: property_id={property_id}, property_name={data.get("property_name")}, total_revenue={data.get("total_revenue")}, total_units={data.get("total_units")}, active_tenants={data.get("active_tenants")}, occupancy_rate={data.get("occupancy_rate")}')
         
         # Validate data
         if not data:
@@ -2050,7 +2051,7 @@ def download_pdf_report():
                 data[field] = 0
         
         # Log validated data
-        current_app.logger.info(f'PDF Report Data - After validation: revenue={data.get("total_revenue")}, units={data.get("total_units")}, tenants={data.get("active_tenants")}')
+        current_app.logger.debug(f'PDF Report Data - After validation: revenue={data.get("total_revenue")}, units={data.get("total_units")}, tenants={data.get("active_tenants")}')
         
         # Create PDF in memory
         buffer = io.BytesIO()
@@ -2094,7 +2095,7 @@ def download_pdf_report():
         pending_tasks = int(data.get('pending_tasks', 0) or 0)
         avg_monthly_rent = float(data.get('avg_monthly_rent', 0) or 0)
         
-        current_app.logger.info(f'PDF Metrics - revenue={total_revenue}, units={total_units}, occupancy={occupancy_rate}%, open_requests={open_requests}, avg_rent={avg_monthly_rent}')
+        current_app.logger.debug(f'PDF Metrics - revenue={total_revenue}, units={total_units}, occupancy={occupancy_rate}%, open_requests={open_requests}, avg_rent={avg_monthly_rent}')
         
         metrics_data = [
             ['Metric', 'Value'],
@@ -2187,7 +2188,7 @@ def download_pdf_report():
             return jsonify({'error': 'No content to generate in PDF report'}), 400
         
         # Log story content for debugging
-        current_app.logger.info(f'PDF story has {len(story)} elements before build')
+        current_app.logger.debug(f'PDF story has {len(story)} elements before build')
         
         # Build PDF
         try:
@@ -2196,7 +2197,7 @@ def download_pdf_report():
             
             # Verify buffer has content
             buffer_size = len(buffer.getvalue())
-            current_app.logger.info(f'PDF buffer size after build: {buffer_size} bytes')
+            current_app.logger.debug(f'PDF buffer size after build: {buffer_size} bytes')
             
             if buffer_size == 0:
                 current_app.logger.error('PDF buffer is empty after build')
@@ -2215,7 +2216,7 @@ def download_pdf_report():
                 download_name=filename
             ))
             response.headers['Content-Length'] = str(buffer_size)
-            current_app.logger.info(f'PDF report generated successfully: {filename}, {buffer_size} bytes')
+            current_app.logger.debug(f'PDF report generated successfully: {filename}, {buffer_size} bytes')
             return response
         except Exception as build_error:
             current_app.logger.error(f'Error building PDF: {build_error}', exc_info=True)

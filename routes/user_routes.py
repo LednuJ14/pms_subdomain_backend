@@ -269,10 +269,10 @@ def update_profile():
                 if value == '' or value is None:
                     value = None
                 setattr(user, field, value)
-                current_app.logger.info(f"Updated {field} for user {current_user_id}: {value}")
+                current_app.logger.debug(f"Updated {field} for user {current_user_id}: {value}")
         
         db.session.commit()
-        current_app.logger.info(f"Successfully committed profile update for user {current_user_id}")
+        current_app.logger.debug(f"Successfully committed profile update for user {current_user_id}")
         
         # Refresh the user object to ensure we have the latest data
         db.session.refresh(user)

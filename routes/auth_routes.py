@@ -30,7 +30,7 @@ def staff_belongs_to_property(user_id, property_id):
         }).first()
         
         if staff:
-            current_app.logger.info(f"Staff {user_id} belongs to property {property_id}")
+            current_app.logger.debug(f"Staff {user_id} belongs to property {property_id}")
             return True
         
         # Debug: Check if staff exists for any property
@@ -78,7 +78,7 @@ def tenant_belongs_to_property(user_id, property_id):
                     "SELECT id, property_id FROM tenants WHERE user_id = :user_id"
                 ), {'user_id': user_id}).first()
                 if debug_tenant:
-                    current_app.logger.info(f"Tenant {user_id} exists but for property {debug_tenant[1]}, not {property_id}")
+                    current_app.logger.debug(f"Tenant {user_id} exists but for property {debug_tenant[1]}, not {property_id}")
                 else:
                     current_app.logger.warning(f"Tenant {user_id} does not exist in tenants table at all")
             except Exception as debug_error:
@@ -95,8 +95,9 @@ def tenant_belongs_to_property(user_id, property_id):
             active_tenant_unit = db.session.execute(text(
                 """
                 SELECT tu.id FROM tenant_units tu
+                INNER JOIN units u ON tu.unit_id = u.id
                 WHERE tu.tenant_id = :tenant_id 
-                  AND tu.property_id = :property_id
+                  AND u.property_id = :property_id
                   AND tu.move_in_date IS NOT NULL 
                   AND tu.move_out_date IS NOT NULL 
                   AND tu.move_out_date >= CURDATE()
@@ -108,7 +109,7 @@ def tenant_belongs_to_property(user_id, property_id):
             }).first()
             
             if active_tenant_unit:
-                current_app.logger.info(f"Tenant {user_id} has rental in property {property_id} (move_out_date >= today)")
+                current_app.logger.debug(f"Tenant {user_id} has rental in property {property_id} (move_out_date >= today)")
                 return True
             
             # Also verify the unit belongs to this property (double check for security)
@@ -118,7 +119,6 @@ def tenant_belongs_to_property(user_id, property_id):
                 SELECT tu.id FROM tenant_units tu
                 INNER JOIN units u ON tu.unit_id = u.id
                 WHERE tu.tenant_id = :tenant_id 
-                  AND tu.property_id = :property_id
                   AND u.property_id = :property_id
                   AND tu.move_in_date IS NOT NULL 
                   AND tu.move_out_date IS NOT NULL 
@@ -131,17 +131,22 @@ def tenant_belongs_to_property(user_id, property_id):
             }).first()
             
             if unit_check:
-                current_app.logger.info(f"Tenant {user_id} verified for property {property_id} (with unit check)")
+                current_app.logger.debug(f"Tenant {user_id} verified for property {property_id} (with unit check)")
                 return True
             
             # Debug: Check what tenant_units records exist for this tenant
             debug_units = db.session.execute(text(
-                "SELECT id, property_id, unit_id, move_in_date, move_out_date FROM tenant_units WHERE tenant_id = :tenant_id"
+                """
+                SELECT tu.id, u.property_id, tu.unit_id, tu.move_in_date, tu.move_out_date 
+                FROM tenant_units tu 
+                INNER JOIN units u ON tu.unit_id = u.id 
+                WHERE tu.tenant_id = :tenant_id
+                """
             ), {'tenant_id': tenant_id}).all()
             if debug_units:
                 current_app.logger.warning(f"Tenant {user_id} has {len(debug_units)} tenant_units records but none match property {property_id} with active dates")
                 for tu in debug_units:
-                    current_app.logger.info(f"  - tenant_units id={tu[0]}, property_id={tu[1]}, unit_id={tu[2]}, move_in={tu[3]}, move_out={tu[4]}")
+                    current_app.logger.debug(f"  - tenant_units id={tu[0]}, property_id={tu[1]}, unit_id={tu[2]}, move_in={tu[3]}, move_out={tu[4]}")
             else:
                 current_app.logger.warning(f"Tenant {user_id} (tenant_id={tenant_id}) has no tenant_units records at all")
             return False
@@ -153,8 +158,9 @@ def tenant_belongs_to_property(user_id, property_id):
                 simple_check = db.session.execute(text(
                     """
                     SELECT tu.id FROM tenant_units tu
+                    INNER JOIN units u ON tu.unit_id = u.id
                     WHERE tu.tenant_id = :tenant_id 
-                      AND tu.property_id = :property_id
+                      AND u.property_id = :property_id
                     LIMIT 1
                     """
                 ), {
@@ -181,6 +187,21 @@ def get_property_id_from_request(data=None):
         property_id = request.args.get('property_id', type=int)
         if property_id:
             return property_id
+            
+        # Check subdomain query parameter (api.js appends ?subdomain=pat if it lacks the property_id)
+        subdomain_param = request.args.get('subdomain')
+        if subdomain_param:
+            subdomain_val = str(subdomain_param).lower().strip()
+            from sqlalchemy import text
+            try:
+                property_obj = db.session.execute(text(
+                    "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(portal_subdomain, ''))) = :subdomain LIMIT 1"
+                ), {'subdomain': subdomain_val}).first()
+                if property_obj:
+                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain_val}' (from query param)")
+                    return property_obj[0]
+            except Exception as e:
+                current_app.logger.warning(f"Error matching subdomain query param: {str(e)}")
         
         # Check header
         property_id = request.headers.get('X-Property-ID', type=int)
@@ -216,13 +237,13 @@ def get_property_id_from_request(data=None):
                 request_data = None
         
         if request_data and isinstance(request_data, dict):
-            current_app.logger.info(f"Request body data keys: {list(request_data.keys())}")
+            current_app.logger.debug(f"Request body data keys: {list(request_data.keys())}")
             
             # Check for property_id (number)
             if 'property_id' in request_data:
                 try:
                     property_id = int(request_data['property_id'])
-                    current_app.logger.info(f"Found property_id={property_id} in request body")
+                    current_app.logger.debug(f"Found property_id={property_id} in request body")
                     return property_id
                 except (ValueError, TypeError) as e:
                     current_app.logger.warning(f"Error parsing property_id: {str(e)}")
@@ -230,7 +251,7 @@ def get_property_id_from_request(data=None):
             # Check for property_subdomain (string) - frontend extracted from URL
             if 'property_subdomain' in request_data:
                 subdomain = str(request_data['property_subdomain']).lower().strip()
-                current_app.logger.info(f"Found property_subdomain='{subdomain}' in request body, attempting to match")
+                current_app.logger.debug(f"Found property_subdomain='{subdomain}' in request body, attempting to match")
                 # Try to find property by subdomain
                 from sqlalchemy import text
                 
@@ -247,7 +268,7 @@ def get_property_id_from_request(data=None):
                     ), {'subdomain': subdomain}).first()
                     
                     if property_obj:
-                        current_app.logger.info(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on portal_subdomain)")
+                        current_app.logger.debug(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on portal_subdomain)")
                         return property_obj[0]
                     
                     # Fallback: Try title column (from main-domain properties table structure)
@@ -260,7 +281,7 @@ def get_property_id_from_request(data=None):
                     ), {'subdomain': subdomain}).first()
                     
                     if property_obj:
-                        current_app.logger.info(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on title)")
+                        current_app.logger.debug(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on title)")
                         return property_obj[0]
                     
                     # Fallback: Try building_name column
@@ -273,7 +294,7 @@ def get_property_id_from_request(data=None):
                     ), {'subdomain': subdomain}).first()
                     
                     if property_obj:
-                        current_app.logger.info(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on building_name)")
+                        current_app.logger.debug(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on building_name)")
                         return property_obj[0]
                     
                     # Fallback: Try name column (if it exists in sub-domain model)
@@ -287,7 +308,7 @@ def get_property_id_from_request(data=None):
                         ), {'subdomain': subdomain}).first()
                         
                         if property_obj:
-                            current_app.logger.info(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on name)")
+                            current_app.logger.debug(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (exact match on name)")
                             return property_obj[0]
                     except Exception:
                         # name column doesn't exist, skip
@@ -308,7 +329,7 @@ def get_property_id_from_request(data=None):
                     ), {'pattern': f'%{subdomain}%'}).first()
                     
                     if property_obj:
-                        current_app.logger.info(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (partial match on portal_subdomain)")
+                        current_app.logger.debug(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (partial match on portal_subdomain)")
                         return property_obj[0]
                     
                     # Try title partial match
@@ -321,7 +342,7 @@ def get_property_id_from_request(data=None):
                     ), {'pattern': f'%{subdomain}%'}).first()
                     
                     if property_obj:
-                        current_app.logger.info(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (partial match on title)")
+                        current_app.logger.debug(f"Matched subdomain '{subdomain}' to property_id={property_obj[0]} (partial match on title)")
                         return property_obj[0]
                 except Exception as partial_match_error:
                     current_app.logger.warning(f"Error in partial match query: {str(partial_match_error)}")
@@ -340,7 +361,7 @@ def get_property_id_from_request(data=None):
         host = request.headers.get('Host', '')
         
         # Log headers for debugging
-        current_app.logger.info(f"Extracting property_id from headers - Origin: '{origin}', Host: '{host}'")
+        current_app.logger.debug(f"Extracting property_id from headers - Origin: '{origin}', Host: '{host}'")
         
         # Check if subdomain contains property identifier
         # Example: pat.localhost:8080 -> try to find property with subdomain "pat"
@@ -350,7 +371,7 @@ def get_property_id_from_request(data=None):
             subdomain_match = re.search(r'([a-zA-Z0-9-]+)\.localhost', origin or host)
             if subdomain_match:
                 subdomain = subdomain_match.group(1).lower()
-                current_app.logger.info(f"Extracted subdomain '{subdomain}' from headers")
+                current_app.logger.debug(f"Extracted subdomain '{subdomain}' from headers")
                 # Try to find property by matching subdomain with property name (case-insensitive)
                 # Match by exact name first, then partial match
                 from sqlalchemy import text
@@ -361,7 +382,7 @@ def get_property_id_from_request(data=None):
                 ), {'subdomain': subdomain}).first()
                 
                 if property_obj:
-                    current_app.logger.info(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on portal_subdomain from headers)")
+                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on portal_subdomain from headers)")
                     return property_obj[0]
                 
                 # Fallback: Try title column
@@ -370,7 +391,7 @@ def get_property_id_from_request(data=None):
                 ), {'subdomain': subdomain}).first()
                 
                 if property_obj:
-                    current_app.logger.info(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on title from headers)")
+                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on title from headers)")
                     return property_obj[0]
                 
                 # Fallback: Try building_name column
@@ -379,7 +400,7 @@ def get_property_id_from_request(data=None):
                 ), {'subdomain': subdomain}).first()
                 
                 if property_obj:
-                    current_app.logger.info(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on building_name from headers)")
+                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on building_name from headers)")
                     return property_obj[0]
                 
                 # Try partial match on portal_subdomain
@@ -388,7 +409,7 @@ def get_property_id_from_request(data=None):
                 ), {'pattern': f'%{subdomain}%'}).first()
                 
                 if property_obj:
-                    current_app.logger.info(f"Found property {property_obj[0]} for subdomain '{subdomain}' (partial match on portal_subdomain from headers)")
+                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (partial match on portal_subdomain from headers)")
                     return property_obj[0]
                 
                 # Log for debugging - list all properties to help troubleshoot
@@ -570,7 +591,7 @@ def login():
             return jsonify({'error': 'Invalid credentials'}), 401
         
         # Log user found for debugging
-        current_app.logger.info(f"User found: id={user.id}, email={user.email}, username={getattr(user, 'username', None)}, role={user.role}")
+        current_app.logger.debug(f"User found: id={user.id}, email={user.email}, username={getattr(user, 'username', None)}, role={user.role}")
         
         # Check if user is active using status enum
         try:
@@ -589,7 +610,7 @@ def login():
                     return jsonify({'error': 'Account is not active'}), 401
             # For staff with pending_verification status, auto-verify and activate them
             elif user.is_staff() and hasattr(user, 'status') and getattr(user.status, 'value', str(user.status)) == 'pending_verification':
-                current_app.logger.info(f"Auto-verifying staff account: user_id={user.id}")
+                current_app.logger.debug(f"Auto-verifying staff account: user_id={user.id}")
                 user.email_verified = True
                 from models.user import UserStatus
                 user.status = UserStatus.ACTIVE
@@ -651,12 +672,12 @@ def login():
             return jsonify({'error': f"PWD Error: {str(pwd_error)}"}), 500
         
         # Log successful password verification
-        current_app.logger.info(f"Password verified successfully for user_id={user.id}, role={user.role}")
+        current_app.logger.debug(f"Password verified successfully for user_id={user.id}, role={user.role}")
         
         # Allow ADMIN users to login to subdomain
         user_role_str = str(user.role).upper() if user.role else ''
         if user_role_str == 'ADMIN':
-            current_app.logger.info(f"Admin {user.id} logging into subdomain")
+            current_app.logger.debug(f"Admin {user.id} logging into subdomain")
             pass
         
         # Check if 2FA is enabled - send email code if enabled (like main domain)
@@ -688,7 +709,7 @@ def login():
         
         # Log user role for debugging
         user_role_str = str(user.role).upper() if user.role else 'UNKNOWN'
-        current_app.logger.info(f"Login attempt - user_id={user.id}, role={user_role_str}, is_tenant={user.is_tenant()}, is_staff={user.is_staff()}, is_property_manager={user.is_property_manager()}")
+        current_app.logger.debug(f"Login attempt - user_id={user.id}, role={user_role_str}, is_tenant={user.is_tenant()}, is_staff={user.is_staff()}, is_property_manager={user.is_property_manager()}")
         
         # Check if this is a main-domain login attempt (staff cannot login to main-domain)
         # Main-domain typically runs on port 5000, sub-domain on port 5001
@@ -722,15 +743,15 @@ def login():
                 property_id = get_property_id_from_request(data=data)
                 
                 # Log for debugging
-                current_app.logger.info(f"Tenant login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
+                current_app.logger.debug(f"Tenant login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
                 
                 # Also log request body if available
                 try:
                     if request.is_json or 'application/json' in request.headers.get('Content-Type', ''):
                         body_data = request.get_json(force=True)
-                        current_app.logger.info(f"Request body contains: {list(body_data.keys()) if body_data else 'empty'}")
+                        current_app.logger.debug(f"Request body contains: {list(body_data.keys()) if body_data else 'empty'}")
                         if body_data and 'property_subdomain' in body_data:
-                            current_app.logger.info(f"property_subdomain value: '{body_data.get('property_subdomain')}'")
+                            current_app.logger.debug(f"property_subdomain value: '{body_data.get('property_subdomain')}'")
                 except Exception as body_log_error:
                     current_app.logger.warning(f"Could not log request body: {str(body_log_error)}")
                 
@@ -754,19 +775,55 @@ def login():
                 # STRICT VALIDATION: For tenants, property_id MUST be provided in the request
                 # We do NOT auto-detect from tenant's lease because that would allow them to login
                 # to any property subdomain (it would always find their property and allow access)
-                if not property_id:
-                    return jsonify({
-                        'error': 'Property context is required. Please login through your property portal.',
-                        'code': 'PROPERTY_CONTEXT_REQUIRED',
-                        'message': 'You must login through the specific property subdomain where you have an active rental.',
-                        'debug': {
-                            'origin': request.headers.get('Origin', ''),
-                            'host': request.headers.get('Host', ''),
-                            'content_type': request.headers.get('Content-Type', ''),
-                            'request_method': request.method,
-                            'has_json': request.is_json
-                        } if current_app.config.get('DEBUG', False) else None
-                    }), 403
+                if not property_id or property_id == -1 or str(property_id) == '-1':
+                    # Allow auto-detection if logging in from the 'admin' portal
+                    is_admin_portal = False
+                    if data and data.get('property_subdomain') == 'admin':
+                        is_admin_portal = True
+                    if not is_admin_portal and ('admin.localhost' in request.headers.get('Origin', '') or 'admin.pms' in request.headers.get('Origin', '')):
+                        is_admin_portal = True
+                        
+                    if is_admin_portal:
+                        from sqlalchemy import text
+                        # Get tenant's active property using new structure
+                        tenant_property = db.session.execute(text(
+                            """
+                            SELECT u.property_id, p.portal_subdomain FROM tenant_units tu
+                            INNER JOIN units u ON tu.unit_id = u.id
+                            INNER JOIN properties p ON u.property_id = p.id
+                            INNER JOIN tenants t ON tu.tenant_id = t.id
+                            WHERE t.user_id = :user_id
+                              AND tu.move_in_date IS NOT NULL 
+                              AND tu.move_out_date IS NOT NULL 
+                              AND tu.move_in_date <= CURDATE() 
+                              AND tu.move_out_date >= CURDATE()
+                            LIMIT 1
+                            """
+                        ), {'user_id': user.id}).first()
+                        
+                        if tenant_property:
+                            property_id = tenant_property[0]
+                            user.auto_detected_subdomain = tenant_property[1]
+                            user.auto_detected_property_id = property_id
+                            current_app.logger.debug(f"Auto-detected property {property_id} for tenant {user.id} from admin portal")
+                        else:
+                            return jsonify({
+                                'error': 'No active leases found. You cannot access the property portal.',
+                                'code': 'NO_ACTIVE_LEASES'
+                            }), 403
+                    else:
+                        return jsonify({
+                            'error': 'Property context is required. Please login through your property portal.',
+                            'code': 'PROPERTY_CONTEXT_REQUIRED',
+                            'message': 'You must login through the specific property subdomain where you have an active rental.',
+                            'debug': {
+                                'origin': request.headers.get('Origin', ''),
+                                'host': request.headers.get('Host', ''),
+                                'content_type': request.headers.get('Content-Type', ''),
+                                'request_method': request.method,
+                                'has_json': request.is_json
+                            } if current_app.config.get('DEBUG', False) else None
+                        }), 403
                 
                 # Verify tenant belongs to THIS SPECIFIC property from the request
                 # This prevents tenants from logging into other property subdomains
@@ -786,7 +843,8 @@ def login():
                         tenant_property = db.session.execute(text(
                             """
                             SELECT p.name FROM tenant_units tu
-                            INNER JOIN properties p ON tu.property_id = p.id
+                            INNER JOIN units u ON tu.unit_id = u.id
+                            INNER JOIN properties p ON u.property_id = p.id
                             INNER JOIN tenants t ON tu.tenant_id = t.id
                             WHERE t.user_id = :user_id
                               AND tu.move_in_date IS NOT NULL 
@@ -819,7 +877,7 @@ def login():
                     }), 403
                 
                 # Log successful property validation
-                current_app.logger.info(f"Tenant {user.id} validated for property {property_id}")
+                current_app.logger.debug(f"Tenant {user.id} validated for property {property_id}")
                 
             except Exception as tenant_check_error:
                 current_app.logger.error(f"Error checking tenant property access: {str(tenant_check_error)}", exc_info=True)
@@ -837,9 +895,9 @@ def login():
                 property_id = get_property_id_from_request(data=data)
                 
                 # Log for debugging
-                current_app.logger.info(f"Staff login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
+                current_app.logger.debug(f"Staff login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
                 
-                if not property_id:
+                if not property_id or property_id == -1 or str(property_id) == '-1':
                     return jsonify({
                         'error': 'Property context is required. Please login through your property portal.',
                         'code': 'PROPERTY_CONTEXT_REQUIRED',
@@ -898,7 +956,7 @@ def login():
                     }), 403
                 
                 # Log successful property validation
-                current_app.logger.info(f"Staff {user.id} validated for property {property_id}")
+                current_app.logger.debug(f"Staff {user.id} validated for property {property_id}")
                 
             except Exception as staff_check_error:
                 current_app.logger.error(f"Error checking staff property access: {str(staff_check_error)}", exc_info=True)
@@ -915,16 +973,16 @@ def login():
                 # If user is a Super Admin, skip property verification entirely
                 user_role_str = str(user.role).upper() if user.role else ''
                 if user_role_str == 'ADMIN':
-                    current_app.logger.info(f"Super Admin {user.id} bypassing property verification")
+                    current_app.logger.debug(f"Super Admin {user.id} bypassing property verification")
                     pass # Skip the rest of the property checks for admin
                 else:
                     # Get property_id from request (subdomain, header, query param, or body)
                     property_id = get_property_id_from_request(data=data)
                     
                     # Log for debugging
-                    current_app.logger.info(f"Property manager login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
+                    current_app.logger.debug(f"Property manager login attempt - user_id={user.id}, email={user.email}, extracted property_id={property_id}")
                     
-                    if not property_id:
+                    if not property_id or property_id == -1 or str(property_id) == '-1':
                         return jsonify({
                             'error': 'Property context is required. Please login through your property portal.',
                             'code': 'PROPERTY_CONTEXT_REQUIRED',
@@ -963,7 +1021,7 @@ def login():
                         }), 403
                     
                     # Log successful property validation
-                    current_app.logger.info(f"Property manager {user.id} validated for property {property_id}")
+                    current_app.logger.debug(f"Property manager {user.id} validated for property {property_id}")
                 
             except Exception as pm_check_error:
                 current_app.logger.error(f"Error checking property manager property access: {str(pm_check_error)}", exc_info=True)
@@ -980,7 +1038,12 @@ def login():
         property_id_for_token = None
         if user.is_tenant() or user.is_staff() or user.is_property_manager():
             try:
-                property_id_for_token = get_property_id_from_request(data=data)
+                if hasattr(user, 'auto_detected_property_id'):
+                    property_id_for_token = user.auto_detected_property_id
+                else:
+                    extracted = get_property_id_from_request(data=data)
+                    if extracted != -1 and str(extracted) != '-1':
+                        property_id_for_token = extracted
             except Exception:
                 pass
         
@@ -1001,7 +1064,7 @@ def login():
             # This ensures subsequent requests know which property context they're in
             if property_id_for_token:
                 jwt_claims['property_id'] = property_id_for_token
-                current_app.logger.info(f"Adding property_id {property_id_for_token} to JWT token for user {user.id}")
+                current_app.logger.debug(f"Adding property_id {property_id_for_token} to JWT token for user {user.id}")
             
             access_token = create_access_token(
                 identity=str(user.id),
@@ -1068,7 +1131,10 @@ def login():
                 'last_name': getattr(user, 'last_name', ''),
                 'role': user.role.value if user.role else 'tenant'
             }
-        
+            
+        if hasattr(user, 'auto_detected_subdomain') and user.auto_detected_subdomain:
+            user_dict['property_subdomain'] = user.auto_detected_subdomain
+
         return jsonify({
             'message': 'Login successful',
             'access_token': access_token,
