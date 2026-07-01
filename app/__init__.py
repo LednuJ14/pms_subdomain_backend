@@ -23,6 +23,14 @@ def create_app(config_name=None):
     config_name = config_name or os.environ.get('FLASK_ENV', 'development')
     app.config.from_object(config[config_name])
     
+    # Initialize Cloudinary
+    import cloudinary
+    cloudinary.config(
+        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+        api_key=os.environ.get('CLOUDINARY_API_KEY'),
+        api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+    )
+    
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
@@ -256,7 +264,7 @@ def create_app(config_name=None):
     swagger_template = {
         "swagger": "2.0",
         "info": {
-            "title": "JACS Property Management Sub-domain API",
+            "title": "PMS Property Management System Sub-domain API",
             "description": "Interactive API documentation for the sub-domain backend.\n\n"
                            "Note: This documentation is generated automatically from the existing Flask routes "
                            "and may not include every detail of request/response payloads.",
@@ -369,6 +377,6 @@ def create_app(config_name=None):
     # Health check endpoint
     @app.route('/api/health')
     def health_check():
-        return {'status': 'healthy', 'message': 'JACS Property Management API is running'}, 200
+        return {'status': 'healthy', 'message': 'PMS Property Management System API is running'}, 200
     
     return app

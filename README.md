@@ -1,6 +1,6 @@
-# JACS Property Management System - Backend
+# PMS Property Management System - Backend
 
-A comprehensive Flask-based backend API for the JACS Property Management System, designed to handle property management, tenant relations, staff coordination, and financial operations.
+A comprehensive Flask-based backend API for the PMS Property Management System, designed to handle property management, tenant relations, staff coordination, and financial operations.
 
 ## 🚀 Features
 
@@ -55,9 +55,9 @@ pip install -r requirements.txt
 
 #### Create MySQL Database
 ```sql
-CREATE DATABASE jacs_property_management;
-CREATE USER 'jacs_user'@'localhost' IDENTIFIED BY 'your_secure_password';
-GRANT ALL PRIVILEGES ON jacs_property_management.* TO 'jacs_user'@'localhost';
+CREATE DATABASE pms_property_management;
+CREATE USER 'pms_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+GRANT ALL PRIVILEGES ON pms_property_management.* TO 'pms_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
@@ -68,9 +68,9 @@ Create a `.env` file in the backend directory and update the following:
 # Database Configuration
 MYSQL_HOST=localhost
 MYSQL_PORT=3306
-MYSQL_USER=jacs_user
+MYSQL_USER=pms_user
 MYSQL_PASSWORD=your_secure_password
-MYSQL_DATABASE=jacs_property_management
+MYSQL_DATABASE=pms_property_management
 
 # Flask Configuration
 FLASK_ENV=development
@@ -112,7 +112,7 @@ The API will be available at `http://localhost:5000`
 After running the database initialization, you can use these credentials:
 
 **Property Manager:**
-- Email: `manager@jacs.com`
+- Email: `manager@pms.com`
 - Password: `Manager123!`
 
 **Tenant:**
@@ -120,7 +120,7 @@ After running the database initialization, you can use these credentials:
 - Password: `Tenant123!`
 
 **Staff:**
-- Email: `staff@jacs.com`
+- Email: `staff@pms.com`
 - Password: `Staff123!`
 
 ## 📚 API Documentation

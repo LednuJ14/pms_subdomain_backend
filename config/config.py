@@ -11,11 +11,11 @@ class Config:
     
     # Database Configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        f"mysql+pymysql://{os.environ.get('MYSQL_USER', 'root')}:" + \
-        f"{os.environ.get('MYSQL_PASSWORD', '')}@" + \
-        f"{os.environ.get('MYSQL_HOST', 'localhost')}:" + \
-        f"{os.environ.get('MYSQL_PORT', '3306')}/" + \
-        f"{os.environ.get('MYSQL_DATABASE', 'property_mngmnt')}"
+        f"mysql+pymysql://{os.environ.get('MYSQL_USER', 'property_mgmt_2026')}:" + \
+        f"{os.environ.get('MYSQL_PASSWORD', 'property2026')}@" + \
+        f"{os.environ.get('MYSQL_HOST', 'siquijor-db-do-user-12791289-0.j.db.ondigitalocean.com')}:" + \
+        f"{os.environ.get('MYSQL_PORT', '25060')}/" + \
+        f"{os.environ.get('MYSQL_DATABASE', 'property_mgmt')}"
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False

@@ -528,25 +528,35 @@ def upload_document():
         # Generate clean filename (use original filename, ensure uniqueness on disk)
         original_filename = secure_filename(file.filename)
         
-        # Ensure upload directory exists
-        upload_dir = os.path.join(current_app.instance_path, current_app.config.get('UPLOAD_FOLDER', 'uploads'))
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Generate unique file path on disk (using UUID only for file system)
-        # But store original filename in database
-        file_extension = os.path.splitext(original_filename)[1] if '.' in original_filename else ''
-        file_base_name = os.path.splitext(original_filename)[0] if '.' in original_filename else original_filename
-        
-        # Check if file already exists, if so append a number
-        disk_filename = original_filename
-        counter = 1
-        while os.path.exists(os.path.join(upload_dir, disk_filename)):
-            disk_filename = f"{file_base_name}_{counter}{file_extension}"
-            counter += 1
-        
-        # Save file with clean name (or numbered if duplicate)
-        file_path = os.path.join(upload_dir, disk_filename)
-        file.save(file_path)
+        # Check if Cloudinary is configured
+        if current_app.config.get('CLOUDINARY_CLOUD_NAME'):
+            from utils.cloudinary_helpers import upload_to_cloudinary
+            success, file_path, error = upload_to_cloudinary(
+                file, 
+                folder=f"jacs/subdomain/documents/{property_id if property_id else 'general'}"
+            )
+            if not success:
+                return jsonify({'error': error}), 400
+        else:
+            # Ensure upload directory exists
+            upload_dir = os.path.join(current_app.instance_path, current_app.config.get('UPLOAD_FOLDER', 'uploads'))
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            # Generate unique file path on disk (using UUID only for file system)
+            # But store original filename in database
+            file_extension = os.path.splitext(original_filename)[1] if '.' in original_filename else ''
+            file_base_name = os.path.splitext(original_filename)[0] if '.' in original_filename else original_filename
+            
+            # Check if file already exists, if so append a number
+            disk_filename = original_filename
+            counter = 1
+            while os.path.exists(os.path.join(upload_dir, disk_filename)):
+                disk_filename = f"{file_base_name}_{counter}{file_extension}"
+                counter += 1
+            
+            # Save file with clean name (or numbered if duplicate)
+            file_path = os.path.join(upload_dir, disk_filename)
+            file.save(file_path)
         
         # Validate tenant_id if provided (for tenant-specific documents)
         tenant_id_final = None
@@ -690,6 +700,12 @@ def download_document(document_id):
             except Exception:
                 current_app.logger.warning('JWT decode failed for document download; allowing request for development')
         file_path = document.file_path
+        
+        # Handle external URLs (like Cloudinary)
+        if file_path and (file_path.startswith('http://') or file_path.startswith('https://')):
+            from flask import redirect
+            return redirect(file_path)
+            
         if not os.path.exists(file_path):
             regenerated_path = None
             try:
@@ -697,8 +713,10 @@ def download_document(document_id):
                 contract_number = None
                 filename = document.filename or ''
                 lower_name = filename.lower()
-                if document.document_type == 'lease' and lower_name.startswith('rental_contract_') and lower_name.endswith('.pdf'):
-                    contract_number = filename[len('rental_contract_'):-4]
+                if document.document_type == 'lease' and lower_name.startswith('rental_contract_') and (lower_name.endswith('.pdf') or lower_name.endswith('.docx')):
+                    # Handle both .pdf and .docx
+                    ext_len = 4 if lower_name.endswith('.pdf') else 5
+                    contract_number = filename[len('rental_contract_'):-ext_len]
                 contract = None
                 if contract_number:
                     contract = RentalContract.query.filter_by(contract_number=contract_number).first()
@@ -711,6 +729,12 @@ def download_document(document_id):
                         db.session.commit()
             except Exception as regen_error:
                 current_app.logger.error(f"Download regeneration error: {str(regen_error)}")
+            
+            # If regenerated path is a URL, redirect to it
+            if regenerated_path and (regenerated_path.startswith('http://') or regenerated_path.startswith('https://')):
+                from flask import redirect
+                return redirect(regenerated_path)
+                
             if regenerated_path and os.path.exists(regenerated_path):
                 file_path = regenerated_path
             else:

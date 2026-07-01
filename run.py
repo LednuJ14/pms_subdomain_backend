@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-JACS Property Management System Backend
+PMS Property Management System Backend
 Main application entry point
 """
 
@@ -32,7 +32,7 @@ if __name__ == '__main__':
     debug = os.environ.get('FLASK_ENV') == 'development'
     
     print("="*50)
-    print("🏢 JACS Property Management System")
+    print("🏢 PMS Property Management System")
     print("🚀 Starting Flask Backend Server...")
     print(f"📡 Running on: http://localhost:{port}")
     print(f"🔧 Environment: {os.environ.get('FLASK_ENV', 'development')}")

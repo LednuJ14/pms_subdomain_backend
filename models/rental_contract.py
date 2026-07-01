@@ -49,6 +49,7 @@ class RentalContract(db.Model):
     tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False)
     unit_id = db.Column(db.Integer, db.ForeignKey('units.id'), nullable=False)
     property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=False)
+    inquiry_id = db.Column(db.Integer, db.ForeignKey('inquiries.id'), nullable=True)
     
     # Contract Type and Duration
     contract_type = db.Column(db.String(20), nullable=False)  # 'quarterly' or 'yearly'
@@ -78,6 +79,17 @@ class RentalContract(db.Model):
     landlord_signed = db.Column(db.Boolean, default=False, nullable=False)
     landlord_signed_date = db.Column(db.DateTime, nullable=True)
     landlord_signed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # User ID who signed as landlord
+    
+    # E-Signature Audit Trail
+    tenant_signature_url = db.Column(db.String(500), nullable=True)
+    tenant_ip = db.Column(db.String(45), nullable=True)
+    tenant_user_agent = db.Column(db.String(255), nullable=True)
+    
+    landlord_signature_url = db.Column(db.String(500), nullable=True)
+    landlord_ip = db.Column(db.String(45), nullable=True)
+    landlord_user_agent = db.Column(db.String(255), nullable=True)
+    
+    document_hash = db.Column(db.String(255), nullable=True)
     
     # Termination Information
     termination_date = db.Column(db.Date, nullable=True)
@@ -256,18 +268,24 @@ class RentalContract(db.Model):
         self.updated_at = datetime.now(timezone.utc)
         db.session.commit()
     
-    def sign_by_tenant(self):
+    def sign_by_tenant(self, signature_url=None, ip=None, user_agent=None):
         self.tenant_signed = True
         self.tenant_signed_date = datetime.now(timezone.utc)
+        self.tenant_signature_url = signature_url
+        self.tenant_ip = ip
+        self.tenant_user_agent = user_agent
         self.updated_at = datetime.now(timezone.utc)
         if self.landlord_signed and self.tenant_signed:
             self.activate()
         db.session.commit()
     
-    def sign_by_landlord(self, landlord_user_id):
+    def sign_by_landlord(self, landlord_user_id, signature_url=None, ip=None, user_agent=None):
         self.landlord_signed = True
         self.landlord_signed_by = landlord_user_id
         self.landlord_signed_date = datetime.now(timezone.utc)
+        self.landlord_signature_url = signature_url
+        self.landlord_ip = ip
+        self.landlord_user_agent = user_agent
         self.updated_at = datetime.now(timezone.utc)
         
         if self.tenant_signed and self.landlord_signed:
@@ -316,107 +334,145 @@ class RentalContract(db.Model):
         }
     
     def _generate_pdf_and_upload_document(self):
-        if not REPORTLAB_AVAILABLE:
-            return
         from models.document import Document
         from models.property import Property
         from models.tenant import Tenant
+        import io
+        import requests
+        import cloudinary.uploader
+        from docxtpl import DocxTemplate
+
         prop = Property.query.get(self.property_id)
         tenant = Tenant.query.get(self.tenant_id)
+        
         unit_number = None
         try:
             unit_number = getattr(self.tenant_unit.unit, 'unit_number', None)
         except Exception:
-            unit_number = None
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, textColor=colors.black, alignment=1)
-        normal = styles['Normal']
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        story = []
-        story.append(Paragraph("Rental Contract Agreement", title_style))
-        story.append(Spacer(1, 0.25*inch))
-        story.append(Paragraph(f"Contract Number: {self.contract_number}", normal))
-        story.append(Paragraph(f"Property: {getattr(prop, 'name', '')}", normal))
-        story.append(Paragraph(f"Unit: {unit_number or self.unit_id}", normal))
+            pass
+
         tenant_name = None
+        tenant_email = ''
         try:
             if tenant and tenant.user:
                 fn = getattr(tenant.user, 'first_name', '') or ''
                 ln = getattr(tenant.user, 'last_name', '') or ''
                 tenant_name = f"{fn} {ln}".strip() or getattr(tenant.user, 'email', None)
+                tenant_email = getattr(tenant.user, 'email', '')
         except Exception:
-            tenant_name = None
-        story.append(Paragraph(f"Tenant: {tenant_name or self.tenant_id}", normal))
-        story.append(Paragraph(f"Start Date: {self.start_date.isoformat()}", normal))
-        story.append(Paragraph(f"End Date: {self.end_date.isoformat()}", normal))
-        story.append(Paragraph(f"Contract Type: {self.contract_type}", normal))
-        story.append(Paragraph(f"Monthly Rent: {float(self.monthly_rent) if self.monthly_rent else 0}", normal))
-        story.append(Paragraph(f"Security Deposit: {float(self.security_deposit) if self.security_deposit else 0}", normal))
-        story.append(Spacer(1, 0.2*inch))
-        terms_text = self.terms_and_conditions or ""
-        special_text = self.special_conditions or ""
-        terms_para = Paragraph(escape(terms_text).replace('\n', '<br />'), normal)
-        special_para = Paragraph(escape(special_text).replace('\n', '<br />'), normal)
-        data = [
-            ["Terms and Conditions", terms_para],
-            ["Special Conditions", special_para],
-        ]
-        table = Table(data, colWidths=[2.0*inch, 4.5*inch])
-        table.setStyle(TableStyle([
-            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
-        ]))
-        story.append(table)
-        story.append(Spacer(1, 0.3*inch))
-        story.append(Paragraph(f"Tenant Signed: {'Yes' if self.tenant_signed else 'No'}", normal))
-        story.append(Paragraph(f"Landlord Signed: {'Yes' if self.landlord_signed else 'No'}", normal))
-        doc.build(story)
-        buffer.seek(0)
-        upload_root = os.path.join(current_app.instance_path, current_app.config.get('UPLOAD_FOLDER', 'uploads'))
-        property_folder = str(self.property_id) if getattr(self, 'property_id', None) is not None else 'unknown_property'
-        target_dir = os.path.join(upload_root, 'contracts', property_folder)
-        os.makedirs(target_dir, exist_ok=True)
-        filename = f"rental_contract_{self.contract_number}.pdf"
-        file_path = os.path.join(target_dir, filename)
-        with open(file_path, 'wb') as f:
-            f.write(buffer.getvalue())
-        self.contract_document_path = file_path
-        uploader_id = getattr(prop, 'owner_id', None)
-        visibility = 'private'
-        existing_doc = None
+            pass
+
+        context = {
+            'contract_number': self.contract_number,
+            'date_generated': date.today().strftime('%Y-%m-%d'),
+            'property_name': getattr(prop, 'title', '') or getattr(prop, 'name', ''),
+            'tenant_name': tenant_name or str(self.tenant_id),
+            'tenant_email': tenant_email,
+            'property_address': getattr(prop, 'address', ''),
+            'unit_number': unit_number or self.unit_id,
+            'start_date': self.start_date.isoformat(),
+            'end_date': self.end_date.isoformat(),
+            'contract_type': self.contract_type,
+            'monthly_rent': float(self.monthly_rent) if self.monthly_rent else 0,
+            'security_deposit': float(self.security_deposit) if self.security_deposit else 0,
+            'total_contract_value': float(self.total_contract_value) if self.total_contract_value else 0,
+            'terms_and_conditions': self.terms_and_conditions or "",
+            'special_conditions': self.special_conditions or "",
+            'landlord_signed': self.landlord_signed,
+            'landlord_signed_date': self.landlord_signed_date.isoformat() if self.landlord_signed_date else "",
+            'tenant_signed': self.tenant_signed,
+            'tenant_signed_date': self.tenant_signed_date.isoformat() if self.tenant_signed_date else ""
+        }
+
         try:
+            template_url = getattr(prop, 'contract_template_url', None)
+            if template_url:
+                response = requests.get(template_url)
+                doc = DocxTemplate(io.BytesIO(response.content))
+            else:
+                doc = DocxTemplate('templates/default_contract_template.docx')
+                
+            from docxtpl import InlineImage
+            from docx.shared import Mm
+            
+            # E-Signature Additions
+            if self.tenant_signature_url:
+                try:
+                    resp = requests.get(self.tenant_signature_url)
+                    context['tenant_signature_image'] = InlineImage(doc, io.BytesIO(resp.content), height=Mm(15))
+                except Exception as e:
+                    current_app.logger.error(f"Failed to load tenant signature image: {e}")
+            else:
+                context['tenant_signature_image'] = ""
+                
+            if self.landlord_signature_url:
+                try:
+                    resp = requests.get(self.landlord_signature_url)
+                    context['landlord_signature_image'] = InlineImage(doc, io.BytesIO(resp.content), height=Mm(15))
+                except Exception as e:
+                    current_app.logger.error(f"Failed to load landlord signature image: {e}")
+            else:
+                context['landlord_signature_image'] = ""
+                
+            # Create a document hash if both signed and hash doesn't exist
+            if self.tenant_signed and self.landlord_signed and not self.document_hash:
+                import hashlib
+                import time
+                hash_input = f"{self.contract_number}-{self.tenant_signature_url}-{self.landlord_signature_url}-{time.time()}"
+                self.document_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+                
+            context['tenant_ip'] = self.tenant_ip or 'N/A'
+            context['tenant_user_agent'] = self.tenant_user_agent or 'N/A'
+            context['landlord_ip'] = self.landlord_ip or 'N/A'
+            context['landlord_user_agent'] = self.landlord_user_agent or 'N/A'
+            context['document_hash'] = self.document_hash or 'Pending Signatures'
+            
+            
+            doc.render(context)
+            buffer = io.BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+            
+            filename = f"rental_contract_{self.contract_number}.docx"
+            
+            # Use streaming upload to cloudinary
+            upload_result = cloudinary.uploader.upload(
+                buffer, 
+                resource_type="raw", 
+                folder="PMS/contracts",
+                public_id=filename
+            )
+            self.contract_document_path = upload_result.get('secure_url')
+            
             existing_doc = Document.query.filter_by(
                 filename=filename,
                 property_id=self.property_id,
                 tenant_id=self.tenant_id,
                 document_type='lease'
             ).first()
-        except Exception:
-            existing_doc = None
-        if existing_doc:
-            existing_doc.name = f"Rental Contract {self.contract_number}"
-            existing_doc.file_path = file_path
-            existing_doc.visibility = visibility
-            if uploader_id:
-                existing_doc.uploaded_by = uploader_id
-            doc_rec = existing_doc
-        else:
-            doc_rec = Document(
-                name=f"Rental Contract {self.contract_number}",
-                filename=filename,
-                file_path=file_path,
-                document_type='lease',
-                uploaded_by=uploader_id if uploader_id else None,
-                property_id=self.property_id,
-                tenant_id=self.tenant_id,
-                visibility=visibility
-            )
-            db.session.add(doc_rec)
-        db.session.add(self)
-        db.session.add(doc_rec)
-        db.session.commit()
+            
+            if existing_doc:
+                existing_doc.file_path = self.contract_document_path
+                existing_doc.name = f"Rental Contract {self.contract_number}"
+                doc_rec = existing_doc
+            else:
+                doc_rec = Document(
+                    name=f"Rental Contract {self.contract_number}",
+                    filename=filename,
+                    file_path=self.contract_document_path,
+                    document_type='lease',
+                    uploaded_by=getattr(prop, 'owner_id', None),
+                    property_id=self.property_id,
+                    tenant_id=self.tenant_id,
+                    visibility='private'
+                )
+                db.session.add(doc_rec)
+                
+            db.session.add(self)
+            db.session.commit()
+            
+        except Exception as e:
+            current_app.logger.error(f"Docxtpl/Cloudinary error: {e}")
     
     def __repr__(self):
         return f'<RentalContract {self.contract_number} - {self.contract_type} - {self.status}>'

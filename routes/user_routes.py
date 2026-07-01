@@ -340,21 +340,31 @@ def upload_profile_image():
         if file_size > 2 * 1024 * 1024:  # 2MB
             return jsonify({'error': 'File size exceeds 2MB limit'}), 400
         
-        # Create upload directory if it doesn't exist
-        upload_dir = os.path.join(current_app.instance_path, 'uploads', 'profile_images')
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Generate secure filename
-        filename = secure_filename(file.filename)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{current_user_id}_{timestamp}_{filename}"
-        filepath = os.path.join(upload_dir, filename)
-        
-        # Save file
-        file.save(filepath)
-        
-        # Generate URL (relative path - will be served by Flask route)
-        image_url = f"/api/users/profile/image/{filename}"
+        # Check if Cloudinary is configured
+        if current_app.config.get('CLOUDINARY_CLOUD_NAME'):
+            from utils.cloudinary_helpers import upload_to_cloudinary
+            success, image_url, error = upload_to_cloudinary(
+                file, 
+                folder=f"jacs/subdomain/users/{current_user_id}"
+            )
+            if not success:
+                return jsonify({'error': error}), 400
+        else:
+            # Create upload directory if it doesn't exist
+            upload_dir = os.path.join(current_app.instance_path, 'uploads', 'profile_images')
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            # Generate secure filename
+            filename = secure_filename(file.filename)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{current_user_id}_{timestamp}_{filename}"
+            filepath = os.path.join(upload_dir, filename)
+            
+            # Save file
+            file.save(filepath)
+            
+            # Generate URL (relative path - will be served by Flask route)
+            image_url = f"/api/users/profile/image/{filename}"
         
         # Update user profile image URL
         user.profile_image_url = image_url
