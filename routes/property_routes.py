@@ -9,6 +9,14 @@ from models.user import User
 
 property_bp = Blueprint('properties', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 def allowed_file(filename):
     """Check if file extension is allowed."""
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg'}
@@ -76,7 +84,7 @@ def get_properties():
                 return jsonify({'error': 'Property not found'}), 404
             
             # Verify ownership
-            if property_obj.owner_id != user.id:
+            if property_obj.owner_id != user.id and not is_super_admin(user.id):
                 return jsonify({
                     'error': 'Access denied. You do not own this property.',
                     'code': 'PROPERTY_ACCESS_DENIED'
@@ -157,7 +165,7 @@ def get_display_settings(property_id):
         
         # Verify user is the owner/manager (use owner_id since manager_id doesn't exist)
         # Compare as integers to avoid type mismatch
-        if int(property_obj.owner_id) != int(current_user_id):
+        if int(property_obj.owner_id) != int(current_user_id) and not is_super_admin(current_user_id):
             current_app.logger.warning(f"Authorization failed for GET: property owner_id={property_obj.owner_id} (type: {type(property_obj.owner_id)}), user_id={current_user_id} (type: {type(current_user_id)})")
             return jsonify({'error': 'Unauthorized'}), 403
         
@@ -266,7 +274,7 @@ def update_display_settings(property_id):
         
         # Verify user is the owner/manager (use owner_id since manager_id doesn't exist)
         # Compare as integers to avoid type mismatch
-        if int(property_obj.owner_id) != int(current_user_id):
+        if int(property_obj.owner_id) != int(current_user_id) and not is_super_admin(current_user_id):
             current_app.logger.warning(f"Authorization failed for PUT: property owner_id={property_obj.owner_id} (type: {type(property_obj.owner_id)}), user_id={current_user_id} (type: {type(current_user_id)})")
             return jsonify({'error': 'Unauthorized'}), 403
         
@@ -380,7 +388,7 @@ def upload_logo(property_id):
             except ValueError:
                 return jsonify({'error': 'Invalid user ID'}), 400
         
-        if int(property_obj.owner_id) != int(current_user_id):
+        if int(property_obj.owner_id) != int(current_user_id) and not is_super_admin(current_user_id):
             return jsonify({'error': 'Unauthorized'}), 403
         
         if 'file' not in request.files:
@@ -728,6 +736,9 @@ def get_property_by_subdomain():
         
         if not subdomain or subdomain.lower() == 'localhost':
             return jsonify({'error': 'Subdomain not provided'}), 400
+            
+        if subdomain.lower() == 'admin':
+            return jsonify({'id': -1, 'name': 'System Admin', 'portal_subdomain': 'admin', 'display_settings': {}}), 200
         
         # Normalize subdomain (remove numeric suffixes like -11)
         import re
@@ -799,3 +810,18 @@ def get_property_by_subdomain():
         error_trace = traceback.format_exc()
         current_app.logger.error(f"Get property by subdomain error: {str(e)}\n{error_trace}", exc_info=True)
         return jsonify({'error': 'Failed to get property', 'details': str(e) if current_app.config.get('DEBUG', False) else None}), 500
+
+@property_bp.route('/admin/all', methods=['GET'])
+@jwt_required()
+def get_all_properties_admin():
+    """Get all properties for System Admin"""
+    try:
+        current_user_id = get_jwt_identity()
+        if not is_super_admin(current_user_id):
+            return jsonify({'error': 'Unauthorized. Super Admin access required.'}), 403
+            
+        properties = Property.query.order_by(Property.created_at.desc()).all()
+        return jsonify([p.to_dict() for p in properties]), 200
+    except Exception as e:
+        current_app.logger.error(f"Get all properties admin error: {str(e)}")
+        return jsonify({'error': 'Failed to get properties'}), 500

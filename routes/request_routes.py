@@ -11,6 +11,14 @@ from models.property import Unit, Property
 
 request_bp = Blueprint('requests', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 def get_current_user():
     """Helper function to get current user from JWT token."""
     current_user_id = get_jwt_identity()
@@ -158,7 +166,7 @@ def get_requests():
             if not property_obj:
                 return jsonify({'error': 'Property not found'}), 404
             
-            if property_obj.owner_id != current_user.id:
+            if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                 return jsonify({
                     'error': 'Access denied. You do not own this property.',
                     'code': 'PROPERTY_ACCESS_DENIED'
@@ -616,7 +624,7 @@ def update_request(request_id):
             if not property_obj:
                 return jsonify({'error': 'Property not found'}), 404
             
-            if property_obj.owner_id != current_user.id:
+            if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                 return jsonify({
                     'error': 'Access denied. You do not own this property.',
                     'code': 'PROPERTY_ACCESS_DENIED'
@@ -871,7 +879,7 @@ def delete_request(request_id):
             if not property_obj:
                 return jsonify({'error': 'Property not found'}), 404
             
-            if property_obj.owner_id != current_user.id:
+            if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                 return jsonify({
                     'error': 'Access denied. You do not own this property.',
                     'code': 'PROPERTY_ACCESS_DENIED'

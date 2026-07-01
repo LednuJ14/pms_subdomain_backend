@@ -18,6 +18,14 @@ from utils.logging_helpers import log_property_access_attempt, log_property_oper
 
 document_bp = Blueprint('documents', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 def get_current_user():
     """Helper function to get current user from JWT token."""
     current_user_id = get_jwt_identity()
@@ -180,7 +188,7 @@ def get_documents():
                 log_property_access_attempt(current_user.id, property_id, action='get_documents', success=False)
                 return property_not_found()
             
-            if property_obj.owner_id != current_user.id:
+            if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                 log_property_access_attempt(current_user.id, property_id, action='get_documents', success=False)
                 return property_access_denied()
             
@@ -443,7 +451,7 @@ def upload_document():
                 if not property_obj:
                     return jsonify({'error': 'Property not found'}), 404
                 
-                if property_obj.owner_id != current_user.id:
+                if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                     return jsonify({
                         'error': 'Access denied. You do not own this property.',
                         'code': 'PROPERTY_ACCESS_DENIED'
@@ -833,7 +841,7 @@ def update_document(document_id):
                 if not property_obj:
                     return jsonify({'error': 'Property not found'}), 404
                 
-                if property_obj.owner_id != current_user.id:
+                if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                     return jsonify({
                         'error': 'Access denied. You do not own this property.',
                         'code': 'PROPERTY_ACCESS_DENIED'
@@ -950,7 +958,7 @@ def delete_document(document_id):
                 if not property_obj:
                     return jsonify({'error': 'Property not found'}), 404
                 
-                if property_obj.owner_id != current_user.id:
+                if property_obj.owner_id != current_user.id and not is_super_admin(current_user.id):
                     return jsonify({
                         'error': 'Access denied. You do not own this property.',
                         'code': 'PROPERTY_ACCESS_DENIED'

@@ -461,6 +461,14 @@ from services.email_service import send_password_reset_email
 
 auth_bp = Blueprint('auth', __name__)
 
+from models.user import User
+
+def is_super_admin(user_id):
+    if not user_id: return False
+    user = User.query.get(user_id)
+    return user and getattr(user, 'role', '') == 'ADMIN'
+
+
 def validate_email(email):
     """Validate email format."""
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -944,7 +952,7 @@ def login():
                     }), 404
                 
                 # CRITICAL: Verify the property manager owns this property
-                if property_obj.owner_id != user.id:
+                if property_obj.owner_id != user.id and not is_super_admin(user.id):
                     property_name = property_obj.name if property_obj else f"Property {property_id}"
                     
                     # Get property manager's owned properties for helpful error message
