@@ -66,27 +66,59 @@ def get_property_id_from_request(data=None):
     Returns None if not found.
     """
     try:
-        # Check query parameter first
-        property_id = request.args.get('property_id', type=int)
-        if property_id:
-            return property_id
+        # 1. Check query parameters
+        property_id_raw = request.args.get('property_id')
+        subdomain_param = request.args.get('subdomain')
         
-        # Check header
-        property_id = request.headers.get('X-Property-ID', type=int)
-        if property_id:
-            return property_id
-        
-        # Check JWT claims
+        if property_id_raw:
+            try:
+                return int(property_id_raw)
+            except ValueError:
+                # It's a string (e.g. 'horizon'), treat it as a subdomain
+                if not subdomain_param:
+                    subdomain_param = property_id_raw
+                    
+        # 2. Check headers
+        header_property_id = request.headers.get('X-Property-ID')
+        if header_property_id:
+            try:
+                return int(header_property_id)
+            except ValueError:
+                # It's a string, treat it as a subdomain
+                if not subdomain_param:
+                    subdomain_param = header_property_id
+
+        # 3. Resolve subdomain if we found one in query or header
+        if subdomain_param:
+            subdomain_val = str(subdomain_param).lower().strip()
+            if subdomain_val != 'admin':
+                try:
+                    # Try exact match on portal_subdomain, title, building_name
+                    match_columns = ['portal_subdomain', 'title', 'building_name']
+                    for col in match_columns:
+                        try:
+                            property_obj = db.session.execute(text(
+                                f"SELECT id FROM properties WHERE LOWER(TRIM(COALESCE({col}, ''))) = :subdomain LIMIT 1"
+                            ), {'subdomain': subdomain_val}).first()
+                            
+                            if property_obj:
+                                return property_obj[0]
+                        except Exception:
+                            continue
+                except Exception as e:
+                    current_app.logger.warning(f"Error matching subdomain {subdomain_val}: {str(e)}")
+
+        # 4. Check JWT claims
         try:
             claims = get_jwt()
             if claims:
                 property_id = claims.get('property_id')
                 if property_id:
-                    return property_id
+                    return int(property_id)
         except Exception:
             pass
         
-        # Check request body if data is provided
+        # 5. Check request body if data is provided
         if data:
             property_id = data.get('property_id')
             if property_id:
@@ -95,32 +127,34 @@ def get_property_id_from_request(data=None):
                 except (ValueError, TypeError):
                     pass
         
-        # Try to extract from subdomain in Origin or Host header
+        # 6. Try to extract from subdomain in Origin or Host header (Fallback)
         origin = request.headers.get('Origin', '')
         host = request.headers.get('Host', '')
         
         if origin or host:
-            # Extract subdomain (e.g., "pat" from "pat.localhost:8080")
-            subdomain_match = re.search(r'([a-zA-Z0-9-]+)\.localhost', origin or host)
-            if subdomain_match:
-                subdomain = subdomain_match.group(1).lower()
-                
-                # Try to find property by matching subdomain
-                try:
-                    # Try exact match on portal_subdomain, title, building_name
-                    match_columns = ['portal_subdomain', 'title', 'building_name']
-                    for col in match_columns:
+            # Extract subdomain (works for both .localhost and production .pms.vicirotechnologies.com)
+            # This matches the first part of the domain before the first dot
+            host_to_check = origin.replace('https://', '').replace('http://', '') if origin else host
+            if host_to_check:
+                parts = host_to_check.split(':')[0].split('.')
+                if len(parts) > 1 and parts[0].lower() != 'localhost' and not parts[0].replace('.', '').isdigit():
+                    subdomain = parts[0].lower()
+                    
+                    if subdomain != 'admin':
                         try:
-                            property_obj = db.session.execute(text(
-                                f"SELECT id FROM properties WHERE LOWER(TRIM(COALESCE({col}, ''))) = :subdomain LIMIT 1"
-                            ), {'subdomain': subdomain}).first()
-                            
-                            if property_obj:
-                                return property_obj[0]
+                            match_columns = ['portal_subdomain', 'title', 'building_name']
+                            for col in match_columns:
+                                try:
+                                    property_obj = db.session.execute(text(
+                                        f"SELECT id FROM properties WHERE LOWER(TRIM(COALESCE({col}, ''))) = :subdomain LIMIT 1"
+                                    ), {'subdomain': subdomain}).first()
+                                    
+                                    if property_obj:
+                                        return property_obj[0]
+                                except Exception:
+                                    continue
                         except Exception:
-                            continue
-                except Exception:
-                    pass
+                            pass
         
         return None
     except Exception as e:
