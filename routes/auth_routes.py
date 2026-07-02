@@ -184,12 +184,18 @@ def get_property_id_from_request(data=None):
     """
     try:
         # Check query parameter first
-        property_id = request.args.get('property_id', type=int)
-        if property_id:
-            return property_id
-            
-        # Check subdomain query parameter (api.js appends ?subdomain=pat if it lacks the property_id)
+        property_id_raw = request.args.get('property_id')
         subdomain_param = request.args.get('subdomain')
+        
+        if property_id_raw:
+            try:
+                return int(property_id_raw)
+            except ValueError:
+                # It's a string (e.g. 'pat'), treat it as a subdomain
+                if not subdomain_param:
+                    subdomain_param = property_id_raw
+                    
+        # Check subdomain query parameter (or string passed as property_id)
         if subdomain_param:
             subdomain_val = str(subdomain_param).lower().strip()
             from sqlalchemy import text
@@ -204,9 +210,23 @@ def get_property_id_from_request(data=None):
                 current_app.logger.warning(f"Error matching subdomain query param: {str(e)}")
         
         # Check header
-        property_id = request.headers.get('X-Property-ID', type=int)
-        if property_id:
-            return property_id
+        header_property_id = request.headers.get('X-Property-ID')
+        if header_property_id:
+            try:
+                return int(header_property_id)
+            except ValueError:
+                # It's a string, try to match it as a subdomain
+                subdomain_val = str(header_property_id).lower().strip()
+                from sqlalchemy import text
+                try:
+                    property_obj = db.session.execute(text(
+                        "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(portal_subdomain, ''))) = :subdomain LIMIT 1"
+                    ), {'subdomain': subdomain_val}).first()
+                    if property_obj:
+                        current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain_val}' (from header)")
+                        return property_obj[0]
+                except Exception as e:
+                    current_app.logger.warning(f"Error matching subdomain header: {str(e)}")
         
         # Try to get from request body (for POST requests)
         # Use provided data if available, otherwise parse request
@@ -364,64 +384,79 @@ def get_property_id_from_request(data=None):
         current_app.logger.debug(f"Extracting property_id from headers - Origin: '{origin}', Host: '{host}'")
         
         # Check if subdomain contains property identifier
-        # Example: pat.localhost:8080 -> try to find property with subdomain "pat"
+        # Example: pat.localhost:8080 or pat.pms.vicirotechnologies.com -> try to find property with subdomain "pat"
         if origin or host:
             import re
-            # Extract subdomain (e.g., "pat" from "pat.localhost:8080" or "pat.localhost")
-            subdomain_match = re.search(r'([a-zA-Z0-9-]+)\.localhost', origin or host)
-            if subdomain_match:
-                subdomain = subdomain_match.group(1).lower()
-                current_app.logger.debug(f"Extracted subdomain '{subdomain}' from headers")
-                # Try to find property by matching subdomain with property name (case-insensitive)
-                # Match by exact name first, then partial match
-                from sqlalchemy import text
-                
-                # Try portal_subdomain first (the correct column for subdomain matching)
-                property_obj = db.session.execute(text(
-                    "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(portal_subdomain, ''))) = :subdomain LIMIT 1"
-                ), {'subdomain': subdomain}).first()
-                
-                if property_obj:
-                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on portal_subdomain from headers)")
-                    return property_obj[0]
-                
-                # Fallback: Try title column
-                property_obj = db.session.execute(text(
-                    "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(title, ''))) = :subdomain LIMIT 1"
-                ), {'subdomain': subdomain}).first()
-                
-                if property_obj:
-                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on title from headers)")
-                    return property_obj[0]
-                
-                # Fallback: Try building_name column
-                property_obj = db.session.execute(text(
-                    "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(building_name, ''))) = :subdomain LIMIT 1"
-                ), {'subdomain': subdomain}).first()
-                
-                if property_obj:
-                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on building_name from headers)")
-                    return property_obj[0]
-                
-                # Try partial match on portal_subdomain
-                property_obj = db.session.execute(text(
-                    "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(portal_subdomain, ''))) LIKE :pattern LIMIT 1"
-                ), {'pattern': f'%{subdomain}%'}).first()
-                
-                if property_obj:
-                    current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (partial match on portal_subdomain from headers)")
-                    return property_obj[0]
-                
-                # Log for debugging - list all properties to help troubleshoot
-                try:
-                    all_props = db.session.execute(text(
-                        "SELECT id, name, title, building_name FROM properties LIMIT 10"
-                    )).all()
-                    current_app.logger.warning(f"Could not find property for subdomain '{subdomain}'. Available properties: {all_props}")
-                except Exception as list_error:
-                    current_app.logger.warning(f"Could not find property for subdomain '{subdomain}'. Error listing properties: {str(list_error)}")
+            # Extract hostname from origin (remove http:// or https:// and port)
+            hostname = host
+            if origin:
+                # e.g. http://pat.localhost:8080 -> pat.localhost
+                origin_match = re.search(r'^https?://([^/:]+)', origin)
+                if origin_match:
+                    hostname = origin_match.group(1)
             else:
-                current_app.logger.warning(f"No subdomain pattern found in Origin '{origin}' or Host '{host}'")
+                # Remove port from host if present
+                host_match = re.search(r'^([^:]+)', host)
+                if host_match:
+                    hostname = host_match.group(1)
+            
+            # Now we have clean hostname, extract the first subdomain segment
+            if hostname:
+                parts = hostname.split('.')
+                # If it's not an IP address and has subdomains
+                if len(parts) > 1 and not re.match(r'^\d+\.\d+\.\d+\.\d+$', hostname):
+                    subdomain = parts[0].lower()
+                    current_app.logger.debug(f"Extracted subdomain '{subdomain}' from headers (hostname: {hostname})")
+                    
+                    # Try to find property by matching subdomain with property name (case-insensitive)
+                    from sqlalchemy import text
+                    
+                    # Try portal_subdomain first (the correct column for subdomain matching)
+                    property_obj = db.session.execute(text(
+                        "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(portal_subdomain, ''))) = :subdomain LIMIT 1"
+                    ), {'subdomain': subdomain}).first()
+                    
+                    if property_obj:
+                        current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on portal_subdomain from headers)")
+                        return property_obj[0]
+                    
+                    # Fallback: Try title column
+                    property_obj = db.session.execute(text(
+                        "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(title, ''))) = :subdomain LIMIT 1"
+                    ), {'subdomain': subdomain}).first()
+                    
+                    if property_obj:
+                        current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on title from headers)")
+                        return property_obj[0]
+                    
+                    # Fallback: Try building_name column
+                    property_obj = db.session.execute(text(
+                        "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(building_name, ''))) = :subdomain LIMIT 1"
+                    ), {'subdomain': subdomain}).first()
+                    
+                    if property_obj:
+                        current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (exact match on building_name from headers)")
+                        return property_obj[0]
+                    
+                    # Try partial match on portal_subdomain
+                    property_obj = db.session.execute(text(
+                        "SELECT id FROM properties WHERE LOWER(TRIM(COALESCE(portal_subdomain, ''))) LIKE :pattern LIMIT 1"
+                    ), {'pattern': f'%{subdomain}%'}).first()
+                    
+                    if property_obj:
+                        current_app.logger.debug(f"Found property {property_obj[0]} for subdomain '{subdomain}' (partial match on portal_subdomain from headers)")
+                        return property_obj[0]
+                    
+                    # Log for debugging - list all properties to help troubleshoot
+                    try:
+                        all_props = db.session.execute(text(
+                            "SELECT id, name, title, building_name FROM properties LIMIT 10"
+                        )).all()
+                        current_app.logger.warning(f"Could not find property for subdomain '{subdomain}'. Available properties: {all_props}")
+                    except Exception as list_error:
+                        current_app.logger.warning(f"Could not find property for subdomain '{subdomain}'. Error listing properties: {str(list_error)}")
+                else:
+                    current_app.logger.warning(f"Hostname '{hostname}' does not contain a valid subdomain pattern")
         else:
             current_app.logger.warning("No Origin or Host header found in request")
         
