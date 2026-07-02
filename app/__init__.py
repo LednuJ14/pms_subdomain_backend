@@ -19,6 +19,10 @@ def create_app(config_name=None):
     """Application factory pattern."""
     app = Flask(__name__)
     
+    # Disable strict slashes globally to prevent 308 CORS redirect errors
+    # when the frontend requests URLs without a trailing slash
+    app.url_map.strict_slashes = False
+    
     # Load configuration
     config_name = config_name or os.environ.get('FLASK_ENV', 'development')
     app.config.from_object(config[config_name])
